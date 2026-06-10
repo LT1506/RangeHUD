@@ -183,3 +183,31 @@ th {
 }
 td:first-child, th:first-child { text-align: left; font-weight: 600; }
 tbody tr:nth-child(even) { background: #191e25; } /* zebra stripes = easier to read */
+
+
+/* =========================================================================
+   GLASSES PREVIEW  (only active when the page has ?glasses=1)
+   -------------------------------------------------------------------------
+   The Ray-Ban Display is a small, monocular in-lens screen. This shrinks the
+   HUD into a roughly lens-sized box so we can sanity-check that the numbers
+   are still readable when there's very little room. It's a design aid — not
+   the real device — but it keeps us honest about the constraint.
+   ========================================================================= */
+body.glasses { background: #000; }
+
+body.glasses #hud {
+  width: 360px;
+  height: 280px;
+  min-height: 0;
+  margin: 40px auto;
+  gap: 10px;
+  border: 1px solid #333;        /* a faux "lens" frame */
+  border-radius: 18px;
+  box-shadow: 0 0 60px rgba(255, 204, 51, 0.05);
+}
+body.glasses .hud-big { font-size: 2.6rem; }       /* still the biggest thing */
+body.glasses .hud-distance { font-size: 1.9rem; }
+body.glasses .hud-sub { font-size: 0.85rem; }
+body.glasses .step-btn { width: 44px; height: 44px; font-size: 1rem; }
+/* On the real glasses, swipes/voice replace these — hide to mimic that. */
+body.glasses #hud .button-row { display: none; }

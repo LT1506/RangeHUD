@@ -309,3 +309,9 @@ const Ballistics = {
   solve: solve,
   pressureForAltitude: pressureForAltitude
 };
+
+// When run under Node.js (e.g. our test file), hand the object to `require`.
+// In a browser there is no `module`, so this line is simply skipped.
+if (typeof module !== "undefined" && module.exports) {
+  module.exports = Ballistics;
+}

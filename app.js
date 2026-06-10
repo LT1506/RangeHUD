@@ -469,6 +469,13 @@ $("dopeBack").addEventListener("click", () => showScreen("setup"));
 refreshProfileSelect();
 showScreen("setup");
 
+// Glasses preview: when opened with ?glasses=1, tag the page so the CSS can
+// shrink the HUD into a small monocular-lens-sized box. Lets us design to the
+// real constraint before we have hardware.
+if (Platform.isGlasses()) {
+  document.body.classList.add("glasses");
+}
+
 /* -------------------------------------------------------------------------
    OFFLINE SUPPORT
    -------------------------------------------------------------------------
