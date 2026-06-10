@@ -1,0 +1,185 @@
+/* =========================================================================
+   style.css  —  ALL THE LOOKS
+   -------------------------------------------------------------------------
+   Two visual moods:
+     1. Setup / DOPE: normal, readable phone UI.
+     2. HUD: very dark, very high contrast, very big — built to be read in a
+        fraction of a second on a tiny in-lens display.
+   ========================================================================= */
+
+/* ---- A "CSS variable" lets us name a color once and reuse it everywhere.
+        Change it here and it changes across the whole app. ---- */
+:root {
+  --bg: #14171c;
+  --card: #1e242c;
+  --text: #e7ecf1;
+  --muted: #8b97a5;
+  --accent: #ffcc33;   /* warm yellow: stays readable in bright daylight */
+  --accent-2: #4fd1ff; /* cyan for wind */
+  --danger: #ff5c5c;
+  --border: #2c343d;
+}
+
+/* The universal reset: make box sizing predictable and kill default margins. */
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  /* Limit width so on a desktop it still looks phone-shaped and centered. */
+  max-width: 480px;
+  margin: 0 auto;
+  padding: 16px;
+  min-height: 100vh;
+}
+
+h1 { font-size: 1.6rem; margin-bottom: 12px; }
+h2 { font-size: 1.05rem; margin-bottom: 10px; color: var(--accent); }
+
+/* This is the key trick for "screens": only one section is visible at a time.
+   JavaScript adds/removes the `hidden` class to switch screens. */
+.hidden { display: none !important; }
+
+/* ---- Cards group related controls with a subtle panel ---- */
+.card {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 14px;
+  margin-bottom: 14px;
+}
+
+label {
+  display: block;
+  font-size: 0.8rem;
+  color: var(--muted);
+  margin: 10px 0 4px;
+}
+
+input, select {
+  width: 100%;
+  padding: 10px;
+  font-size: 1rem;
+  background: #11151a;
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+
+/* ---- Buttons ---- */
+button {
+  padding: 11px 14px;
+  font-size: 0.95rem;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: #2a323b;
+  color: var(--text);
+  cursor: pointer;
+}
+button:active { transform: translateY(1px); } /* tiny press feedback */
+
+.primary { background: var(--accent); color: #1a1a1a; border-color: var(--accent); font-weight: 600; }
+.danger  { color: var(--danger); border-color: var(--danger); }
+.ghost   { background: transparent; color: var(--muted); }
+
+.button-row {
+  display: flex;
+  gap: 8px;
+  margin-top: 12px;
+  flex-wrap: wrap;
+}
+.button-row button { flex: 1; }
+
+.hint { color: var(--muted); font-size: 0.8rem; margin-bottom: 10px; }
+
+
+/* =========================================================================
+   HUD SCREEN  —  the glanceable display
+   ========================================================================= */
+#hud {
+  background: #000;            /* pure black for maximum contrast */
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 22px;
+  text-align: center;
+}
+
+.hud-profile {
+  color: var(--muted);
+  font-size: 1rem;
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+}
+
+.hud-distance-row {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+}
+.hud-distance {
+  font-size: 3rem;
+  font-weight: 700;
+  color: var(--text);
+}
+.hud-distance .unit { font-size: 1.2rem; color: var(--muted); margin-left: 4px; }
+
+.step-btn {
+  font-size: 1.3rem;
+  font-weight: 700;
+  width: 64px;
+  height: 64px;
+  border-radius: 50%;
+  background: #1a1a1a;
+  border: 2px solid var(--border);
+  color: var(--text);
+}
+
+/* Each hold (elevation / wind) is a stacked block. */
+.hud-hold { line-height: 1.1; }
+.hud-label {
+  font-size: 0.85rem;
+  letter-spacing: 0.2em;
+  color: var(--muted);
+  margin-bottom: 4px;
+}
+.hud-big {
+  font-size: 4.2rem;        /* HUGE: this is the number you read at a glance */
+  font-weight: 800;
+  color: var(--accent);
+}
+.hud-big .unit { font-size: 1.4rem; color: var(--muted); margin-left: 6px; }
+.hud-sub { font-size: 1.1rem; color: var(--muted); margin-top: 2px; }
+
+/* Tint the wind hold differently so the two never get confused at a glance. */
+#hud .hud-hold:nth-of-type(3) .hud-big { color: var(--accent-2); }
+
+#hudBack { margin-top: 10px; }
+
+
+/* =========================================================================
+   DOPE TABLE
+   ========================================================================= */
+.table-wrap {
+  overflow-x: auto;            /* lets the table scroll on very narrow screens */
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  margin-bottom: 14px;
+}
+table { width: 100%; border-collapse: collapse; font-size: 0.9rem; }
+th, td { padding: 8px 6px; text-align: right; }
+th {
+  background: #11151a;
+  color: var(--accent);
+  position: sticky;     /* header stays put while the body scrolls */
+  top: 0;
+}
+td:first-child, th:first-child { text-align: left; font-weight: 600; }
+tbody tr:nth-child(even) { background: #191e25; } /* zebra stripes = easier to read */

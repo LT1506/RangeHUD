@@ -1,0 +1,213 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <!-- This line makes the page size itself to the phone screen instead of
+       pretending to be a desktop. Essential for any mobile/glasses UI. -->
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>RangeHUD</title>
+  <link rel="stylesheet" href="style.css" />
+  <!-- Tells the browser this is an installable app, and sets the toolbar tint. -->
+  <link rel="manifest" href="manifest.webmanifest" />
+  <meta name="theme-color" content="#14171c" />
+</head>
+<body>
+
+  <!-- =====================================================================
+       SCREEN 1: SETUP  (normal phone UI)
+       Pick a profile, set conditions, set target distance.
+       ===================================================================== -->
+  <section id="setup" class="screen">
+    <h1>RangeHUD</h1>
+
+    <!-- ---- Profile picker ---- -->
+    <div class="card">
+      <label for="profileSelect">Profile</label>
+      <select id="profileSelect"></select>
+      <div class="button-row">
+        <button id="newProfileBtn">New</button>
+        <button id="editProfileBtn">Edit</button>
+        <button id="deleteProfileBtn" class="danger">Delete</button>
+      </div>
+    </div>
+
+    <!-- ---- Profile editor form (hidden until New/Edit is pressed) ---- -->
+    <div id="profileForm" class="card hidden">
+      <h2 id="profileFormTitle">New Profile</h2>
+
+      <label for="pfName">Name</label>
+      <input id="pfName" type="text" placeholder="e.g. Match load" />
+
+      <label for="pfCaliber">Caliber</label>
+      <input id="pfCaliber" type="text" placeholder="e.g. 6.5 Creedmoor" />
+
+      <label for="pfWeight">Bullet weight (grains)</label>
+      <input id="pfWeight" type="number" step="1" />
+
+      <label for="pfDragModel">Drag model</label>
+      <select id="pfDragModel">
+        <option value="G7">G7 (long boat-tail bullets)</option>
+        <option value="G1">G1 (flat-base bullets)</option>
+      </select>
+
+      <label for="pfBc">Ballistic coefficient (BC)</label>
+      <input id="pfBc" type="number" step="0.001" />
+
+      <label for="pfMv">Muzzle velocity (fps)</label>
+      <input id="pfMv" type="number" step="1" />
+
+      <label for="pfZero">Zero distance (yards)</label>
+      <input id="pfZero" type="number" step="1" />
+
+      <label for="pfSight">Sight height (inches)</label>
+      <input id="pfSight" type="number" step="0.1" />
+
+      <div class="button-row">
+        <button id="saveProfileBtn" class="primary">Save</button>
+        <button id="cancelProfileBtn">Cancel</button>
+      </div>
+    </div>
+
+    <!-- ---- Environmental conditions ---- -->
+    <div class="card">
+      <h2>Conditions</h2>
+
+      <!-- Fills temp, pressure, altitude and wind speed from a live weather
+           service using your location. You can still tweak anything by hand. -->
+      <button id="getWeatherBtn" class="primary">&#128205; Get weather for my location</button>
+
+      <label for="windSpeed">Wind speed (mph)</label>
+      <input id="windSpeed" type="number" step="1" value="10" />
+
+      <label for="windClock">Wind direction (clock face)</label>
+      <select id="windClock">
+        <option value="12">12 o'clock (headwind)</option>
+        <option value="1">1 o'clock</option>
+        <option value="2">2 o'clock</option>
+        <option value="3" selected>3 o'clock (full value, right)</option>
+        <option value="4">4 o'clock</option>
+        <option value="5">5 o'clock</option>
+        <option value="6">6 o'clock (tailwind)</option>
+        <option value="7">7 o'clock</option>
+        <option value="8">8 o'clock</option>
+        <option value="9">9 o'clock (full value, left)</option>
+        <option value="10">10 o'clock</option>
+        <option value="11">11 o'clock</option>
+      </select>
+
+      <label for="incline">Shot angle (degrees up or down)</label>
+      <input id="incline" type="number" step="1" value="0" />
+      <button id="readTiltBtn">Read angle from phone tilt</button>
+
+      <label for="temp">Temperature (&deg;F)</label>
+      <input id="temp" type="number" step="1" value="59" />
+
+      <label for="pressure">Pressure (inHg)</label>
+      <input id="pressure" type="number" step="0.01" value="29.92" />
+
+      <label for="altitude">Altitude (ft) &mdash; optional helper</label>
+      <input id="altitude" type="number" step="100" value="0" />
+      <button id="altToPressureBtn">Set pressure from altitude</button>
+    </div>
+
+    <!-- ---- Truing: calibrate the profile to your real range data ---- -->
+    <div class="card">
+      <h2>Truing (calibrate to real data)</h2>
+      <p class="hint">Shoot a group at a known distance, note the elevation that
+        actually hit, and the app adjusts the profile to match it.</p>
+
+      <label for="trueDistance">Distance (yards)</label>
+      <input id="trueDistance" type="number" step="25" value="500" />
+
+      <label for="trueObserved">Observed elevation that hit (mils)</label>
+      <input id="trueObserved" type="number" step="0.1" />
+
+      <label for="trueParam">Adjust</label>
+      <select id="trueParam">
+        <option value="muzzleVelocityFps">Muzzle velocity</option>
+        <option value="bc">Ballistic coefficient</option>
+      </select>
+
+      <div class="button-row">
+        <button id="trueBtn">True profile</button>
+      </div>
+      <p id="trueResult" class="hint"></p>
+    </div>
+
+    <!-- ---- Target distance + navigation ---- -->
+    <div class="card">
+      <label for="targetDistance">Target distance (yards)</label>
+      <input id="targetDistance" type="number" step="25" value="500" />
+
+      <div class="button-row">
+        <button id="goHudBtn" class="primary">Open HUD &rarr;</button>
+        <button id="goDopeBtn">DOPE table</button>
+      </div>
+    </div>
+  </section>
+
+
+  <!-- =====================================================================
+       SCREEN 2: HUD  (the glanceable card — what would go to the glasses)
+       Big text, dark, minimal. Only the essentials.
+       ===================================================================== -->
+  <section id="hud" class="screen hidden">
+    <div id="hudProfile" class="hud-profile">Profile</div>
+
+    <div class="hud-distance-row">
+      <button id="minus25" class="step-btn">&minus;25</button>
+      <div class="hud-distance"><span id="hudDistance">500</span><span class="unit">yd</span></div>
+      <button id="plus25" class="step-btn">+25</button>
+    </div>
+
+    <div class="hud-hold">
+      <div class="hud-label">ELEVATION</div>
+      <div class="hud-big"><span id="hudElevMil">0.0</span><span class="unit">mil</span></div>
+      <div class="hud-sub"><span id="hudElevMOA">0.0</span> MOA</div>
+    </div>
+
+    <div class="hud-hold">
+      <div class="hud-label">WIND HOLD</div>
+      <div class="hud-big"><span id="hudWindMil">0.0</span><span class="unit">mil</span></div>
+      <div class="hud-sub"><span id="hudWindMOA">0.0</span> MOA</div>
+    </div>
+
+    <div class="button-row">
+      <button id="hudSpeak" class="ghost">&#128266; Speak</button>
+      <button id="hudBack" class="ghost">&larr; Setup</button>
+    </div>
+  </section>
+
+
+  <!-- =====================================================================
+       SCREEN 3: DOPE TABLE  (drop/drift in 25-yard steps to 1000 yards)
+       ===================================================================== -->
+  <section id="dope" class="screen hidden">
+    <h1 id="dopeProfile">DOPE</h1>
+    <p class="hint">Uses the current conditions you set on the Setup screen.</p>
+    <div class="table-wrap">
+      <table id="dopeTable">
+        <thead>
+          <tr>
+            <th>Yds</th>
+            <th>Drop MIL</th>
+            <th>Drop MOA</th>
+            <th>Wind MIL</th>
+            <th>Vel fps</th>
+          </tr>
+        </thead>
+        <tbody id="dopeBody"></tbody>
+      </table>
+    </div>
+    <button id="dopeBack" class="ghost">&larr; Setup</button>
+  </section>
+
+
+  <!-- Load our scripts. Order matters: the math and storage helpers must
+       exist BEFORE app.js tries to use them. -->
+  <script src="ballistics.js"></script>
+  <script src="storage.js"></script>
+  <script src="platform.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>

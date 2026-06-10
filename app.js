@@ -1,0 +1,485 @@
+/* =========================================================================
+   app.js  —  THE GLUE BETWEEN THE PAGE AND THE MATH
+   -------------------------------------------------------------------------
+   This is the ONLY file that touches the page (the "DOM" = Document Object
+   Model, the browser's live tree of HTML elements). Its job:
+     1. Read what the user typed.
+     2. Ask ballistics.js to do the math.
+     3. Write the answers back onto the page.
+     4. Handle button clicks and screen switching.
+
+   Everything runs after the page has loaded (the scripts are at the bottom of
+   index.html, so all the elements already exist when this runs).
+   ========================================================================= */
+
+/* -------------------------------------------------------------------------
+   A tiny helper so we don't type document.getElementById a hundred times.
+   ------------------------------------------------------------------------- */
+function $(id) {
+  return document.getElementById(id);
+}
+
+/* -------------------------------------------------------------------------
+   APP STATE: the few values we keep track of while the app is running.
+   ------------------------------------------------------------------------- */
+let profiles = Storage.loadProfiles();   // the array of saved profiles
+let activeId = Storage.getActiveId() || profiles[0].id;
+let hudDistanceYd = 500;                 // the distance the HUD is showing
+let editingId = null;                    // which profile the form is editing (null = new)
+
+/* -------------------------------------------------------------------------
+   SCREEN SWITCHING
+   Hide every .screen, then show the one we want.
+   ------------------------------------------------------------------------- */
+function showScreen(id) {
+  document.querySelectorAll(".screen").forEach((s) => s.classList.add("hidden"));
+  $(id).classList.remove("hidden");
+}
+
+/* -------------------------------------------------------------------------
+   READING THE CURRENT INPUTS
+   ------------------------------------------------------------------------- */
+
+// Find the profile object that is currently selected.
+function getActiveProfile() {
+  return profiles.find((p) => p.id === activeId) || profiles[0];
+}
+
+// Gather the condition fields into one plain object for the solver.
+// We turn wind speed + clock direction into the crosswind COMPONENT (the part
+// blowing straight across the shot) plus which side it favors. A 3 o'clock
+// wind is full value from the right; 6/12 o'clock is pure tail/head (no drift).
+function getConditions() {
+  const windSpeedMph = Number($("windSpeed").value);
+  const clock = Number($("windClock").value);
+  const angleRad = clock * 30 * Math.PI / 180;   // each clock hour = 30 degrees
+  const sideways = Math.sin(angleRad);            // +1 at 3 o'clock, -1 at 9 o'clock
+
+  let windSide = "—";                             // "—" = pure head/tail, no drift
+  if (sideways > 0.001) windSide = "R";
+  else if (sideways < -0.001) windSide = "L";
+
+  return {
+    windSpeedMph: windSpeedMph,
+    crosswindMph: windSpeedMph * Math.abs(sideways),
+    windSide: windSide,
+    tempF: Number($("temp").value),
+    pressureInHg: Number($("pressure").value),
+    altitudeFt: Number($("altitude").value),
+    inclineDeg: Number($("incline").value)
+  };
+}
+
+/* -------------------------------------------------------------------------
+   PROFILE DROPDOWN
+   Rebuild the <select> options from our profiles array.
+   ------------------------------------------------------------------------- */
+function refreshProfileSelect() {
+  const select = $("profileSelect");
+  select.innerHTML = ""; // clear out the old options
+  profiles.forEach((p) => {
+    const option = document.createElement("option");
+    option.value = p.id;
+    option.textContent = p.name;
+    if (p.id === activeId) option.selected = true;
+    select.appendChild(option);
+  });
+}
+
+/* -------------------------------------------------------------------------
+   THE PROFILE EDITOR FORM
+   ------------------------------------------------------------------------- */
+
+// Open the form. If `profile` is given we're editing; otherwise it's blank/new.
+function openProfileForm(profile) {
+  editingId = profile ? profile.id : null;
+  $("profileFormTitle").textContent = profile ? "Edit Profile" : "New Profile";
+
+  // Fill the fields (use blanks for a brand-new profile).
+  $("pfName").value = profile ? profile.name : "";
+  $("pfCaliber").value = profile ? profile.caliber : "";
+  $("pfWeight").value = profile ? profile.bulletWeightGr : "";
+  $("pfDragModel").value = profile ? profile.dragModel : "G7";
+  $("pfBc").value = profile ? profile.bc : "";
+  $("pfMv").value = profile ? profile.muzzleVelocityFps : "";
+  $("pfZero").value = profile ? profile.zeroDistanceYd : 100;
+  $("pfSight").value = profile ? profile.sightHeightIn : 1.5;
+
+  $("profileForm").classList.remove("hidden");
+}
+
+function closeProfileForm() {
+  $("profileForm").classList.add("hidden");
+}
+
+// Read the form fields and save (either updating or adding a profile).
+function saveProfileFromForm() {
+  const profile = {
+    // Reuse the id if editing; otherwise make a fresh unique one.
+    id: editingId || ("p" + Date.now()),
+    name: $("pfName").value || "Unnamed",
+    caliber: $("pfCaliber").value,
+    bulletWeightGr: Number($("pfWeight").value),
+    dragModel: $("pfDragModel").value,
+    bc: Number($("pfBc").value),
+    muzzleVelocityFps: Number($("pfMv").value),
+    zeroDistanceYd: Number($("pfZero").value),
+    sightHeightIn: Number($("pfSight").value)
+  };
+
+  // Basic sanity check on the values the math depends on.
+  if (!(profile.bc > 0) || !(profile.muzzleVelocityFps > 0)) {
+    alert("Please enter a positive BC and muzzle velocity.");
+    return;
+  }
+
+  if (editingId) {
+    // Replace the existing profile in the array.
+    const i = profiles.findIndex((p) => p.id === editingId);
+    profiles[i] = profile;
+  } else {
+    profiles.push(profile);
+  }
+
+  activeId = profile.id;
+  Storage.saveProfiles(profiles);
+  Storage.setActiveId(activeId);
+  refreshProfileSelect();
+  closeProfileForm();
+}
+
+function deleteActiveProfile() {
+  if (profiles.length <= 1) {
+    alert("Keep at least one profile.");
+    return;
+  }
+  if (!confirm("Delete this profile?")) return;
+  profiles = profiles.filter((p) => p.id !== activeId);
+  activeId = profiles[0].id;
+  Storage.saveProfiles(profiles);
+  Storage.setActiveId(activeId);
+  refreshProfileSelect();
+}
+
+/* -------------------------------------------------------------------------
+   RENDERING THE HUD
+   ------------------------------------------------------------------------- */
+let lastSpeech = "";  // the most recent spoken summary (for the Speak button/gesture)
+
+function renderHud() {
+  const profile = getActiveProfile();
+  const conditions = getConditions();
+
+  // Do the physics, then read the hold for the current distance.
+  const solution = Ballistics.solve(profile, conditions);
+  const hold = solution.holdAt(hudDistanceYd);
+
+  // Ask the platform adapter to format the answer for us. This keeps the HUD
+  // free of formatting decisions and ready for the glasses (which can also
+  // speak the result and show a compact line).
+  const out = Platform.formatSolution({
+    profileName: profile.name,
+    distanceYd: hudDistanceYd,
+    hold: hold,
+    windSide: conditions.windSide,
+    inclineDeg: conditions.inclineDeg
+  });
+  lastSpeech = out.speech;
+
+  // Show the profile name, plus the shot angle if it isn't flat ground.
+  const inc = conditions.inclineDeg;
+  $("hudProfile").textContent = profile.name + (inc ? "  •  " + inc + "°" : "");
+  $("hudDistance").textContent = hudDistanceYd;
+
+  $("hudElevMil").textContent = out.card.elevMil.toFixed(1);
+  $("hudElevMOA").textContent = out.card.elevMOA.toFixed(1);
+
+  const prefix = (out.card.windMil < 0.05) ? "" : out.card.windSide + " ";
+  $("hudWindMil").textContent = prefix + out.card.windMil.toFixed(1);
+  $("hudWindMOA").textContent = Math.abs(hold.driftMOA).toFixed(1);
+}
+
+/* -------------------------------------------------------------------------
+   RENDERING THE DOPE TABLE
+   One row per 25 yards from 25 to 1000.
+   ------------------------------------------------------------------------- */
+function renderDope() {
+  const profile = getActiveProfile();
+  const conditions = getConditions();
+  const solution = Ballistics.solve(profile, conditions);
+
+  $("dopeProfile").textContent = profile.name + " — DOPE";
+
+  const body = $("dopeBody");
+  body.innerHTML = "";
+
+  for (let yd = 25; yd <= 1000; yd += 25) {
+    const h = solution.holdAt(yd);
+    const row = document.createElement("tr");
+    row.innerHTML =
+      "<td>" + yd + "</td>" +
+      "<td>" + h.dropMil.toFixed(1) + "</td>" +
+      "<td>" + h.dropMOA.toFixed(1) + "</td>" +
+      "<td>" + Math.abs(h.driftMil).toFixed(1) + "</td>" +
+      "<td>" + Math.round(h.velocityFps) + "</td>";
+    body.appendChild(row);
+  }
+}
+
+/* -------------------------------------------------------------------------
+   LIVE WEATHER
+   -------------------------------------------------------------------------
+   We fetch real conditions from Open-Meteo, a free weather service that needs
+   no API key. First we need a location:
+     - Best: the browser's Geolocation (asks your permission, most accurate).
+     - Fallback: a rough location from your internet address (no permission,
+       handy when geolocation is blocked, e.g. opening the file directly).
+   These are "async" functions: they talk to the internet, which takes time,
+   so we use `await` to wait for each answer before moving on.
+   ------------------------------------------------------------------------- */
+
+// Look up an approximate location from the user's IP address.
+async function ipLocation() {
+  const res = await fetch("https://ipapi.co/json/");
+  if (!res.ok) throw new Error("location lookup failed");
+  const data = await res.json();
+  return { lat: data.latitude, lon: data.longitude };
+}
+
+// Get coordinates: try the precise browser API, fall back to IP if it fails.
+function getLocation() {
+  return new Promise((resolve, reject) => {
+    if (!navigator.geolocation) {
+      ipLocation().then(resolve, reject);
+      return;
+    }
+    navigator.geolocation.getCurrentPosition(
+      (pos) => resolve({ lat: pos.coords.latitude, lon: pos.coords.longitude }),
+      () => ipLocation().then(resolve, reject), // denied/blocked -> IP fallback
+      { timeout: 8000 }
+    );
+  });
+}
+
+// Ask Open-Meteo for the current weather at a latitude/longitude.
+async function getWeather(lat, lon) {
+  const url =
+    "https://api.open-meteo.com/v1/forecast" +
+    "?latitude=" + lat + "&longitude=" + lon +
+    "&current=temperature_2m,surface_pressure,wind_speed_10m" +
+    "&temperature_unit=fahrenheit&wind_speed_unit=mph";
+  const res = await fetch(url);
+  if (!res.ok) throw new Error("weather service error");
+  const data = await res.json();
+  const c = data.current;
+  return {
+    tempF: c.temperature_2m,
+    pressureInHg: c.surface_pressure * 0.02953, // hPa -> inches of mercury
+    windMph: c.wind_speed_10m,
+    elevationFt: data.elevation * 3.28084        // meters -> feet
+  };
+}
+
+// The button handler: tie it all together and fill in the fields.
+async function fetchWeatherIntoForm() {
+  const btn = $("getWeatherBtn");
+  const original = btn.textContent;
+  btn.disabled = true;
+  btn.textContent = "Getting weather…";
+  try {
+    const where = await getLocation();
+    const w = await getWeather(where.lat, where.lon);
+
+    $("temp").value = Math.round(w.tempF);
+    $("pressure").value = w.pressureInHg.toFixed(2);
+    $("altitude").value = Math.round(w.elevationFt);
+    $("windSpeed").value = Math.round(w.windMph);
+
+    btn.textContent = "✓ Updated";
+  } catch (err) {
+    alert(
+      "Couldn't fetch weather (" + err.message + ").\n" +
+      "Check your internet connection, or just enter conditions by hand."
+    );
+    btn.textContent = original;
+  } finally {
+    // Re-enable after a moment so you can see the result.
+    setTimeout(() => { btn.textContent = original; btn.disabled = false; }, 1500);
+  }
+}
+
+/* -------------------------------------------------------------------------
+   TRUING: calibrate a profile to real range data
+   -------------------------------------------------------------------------
+   You enter the elevation (in mils) that ACTUALLY hit at a known distance.
+   We then nudge one parameter (muzzle velocity OR ballistic coefficient) up
+   and down until the predicted hold matches what you saw. Same "secant method"
+   idea used to find the launch angle in ballistics.js: guess, measure the
+   error, use it to guess better.
+   ------------------------------------------------------------------------- */
+function trueProfile(profile, env, distanceYd, observedMil, param) {
+  const base = profile[param];
+
+  // How wrong is a trial value? (predicted drop minus your observed drop)
+  function error(value) {
+    const trial = Object.assign({}, profile); // a copy, so we don't disturb the real one
+    trial[param] = value;
+    const solution = Ballistics.solve(trial, env);
+    return solution.holdAt(distanceYd).dropMil - observedMil;
+  }
+
+  let x0 = base * 0.9, f0 = error(x0);
+  let x1 = base * 1.1, f1 = error(x1);
+  for (let i = 0; i < 30; i++) {
+    if (f1 === f0) break;
+    let x2 = x1 - f1 * (x1 - x0) / (f1 - f0);
+    // Keep the answer physically sane.
+    const min = base * 0.5, max = base * (param === "bc" ? 2 : 1.5);
+    x2 = Math.max(min, Math.min(max, x2));
+    const f2 = error(x2);
+    x0 = x1; f0 = f1;
+    x1 = x2; f1 = f2;
+    if (Math.abs(f2) < 0.01) break; // within 0.01 mil = close enough
+  }
+  return x1;
+}
+
+function doTruing() {
+  const profile = getActiveProfile();
+  const env = getConditions();
+  const distanceYd = Number($("trueDistance").value);
+  const observedMil = Number($("trueObserved").value);
+  const param = $("trueParam").value;
+
+  if (!(distanceYd > 0) || !(observedMil > 0)) {
+    alert("Enter a distance and the observed elevation in mils.");
+    return;
+  }
+
+  const newValue = trueProfile(profile, env, distanceYd, observedMil, param);
+  // profile is a live reference into our profiles array, so this updates it.
+  profile[param] = (param === "bc") ? Number(newValue.toFixed(3)) : Math.round(newValue);
+  Storage.saveProfiles(profiles);
+  refreshProfileSelect();
+
+  $("trueResult").textContent = (param === "bc")
+    ? "Trued: BC = " + profile.bc
+    : "Trued: muzzle velocity = " + profile.muzzleVelocityFps + " fps";
+}
+
+/* -------------------------------------------------------------------------
+   READ SHOT ANGLE FROM THE PHONE'S TILT SENSOR (one-shot)
+   -------------------------------------------------------------------------
+   `deviceorientation` reports the phone's tilt. `beta` is the front-to-back
+   tilt in degrees — roughly the up/down angle when you point the phone at a
+   target. We grab one reading, then stop listening. Desktops have no sensor,
+   so we fail politely and let you type the angle instead.
+   ------------------------------------------------------------------------- */
+function readTilt() {
+  function handle(e) {
+    const angle = Math.round(Math.abs(e.beta || 0));
+    $("incline").value = angle;
+    window.removeEventListener("deviceorientation", handle);
+  }
+  // iOS requires asking permission first.
+  if (typeof DeviceOrientationEvent !== "undefined" &&
+      typeof DeviceOrientationEvent.requestPermission === "function") {
+    DeviceOrientationEvent.requestPermission()
+      .then((state) => {
+        if (state === "granted") window.addEventListener("deviceorientation", handle);
+        else alert("Tilt permission denied — enter the angle by hand.");
+      })
+      .catch(() => alert("Tilt unavailable — enter the angle by hand."));
+  } else if ("ondeviceorientation" in window) {
+    window.addEventListener("deviceorientation", handle);
+  } else {
+    alert("No tilt sensor here (e.g. on a desktop) — enter the angle by hand.");
+  }
+}
+
+/* -------------------------------------------------------------------------
+   WIRING UP ALL THE BUTTONS / EVENTS
+   "When the user does X, run function Y."
+   ------------------------------------------------------------------------- */
+$("getWeatherBtn").addEventListener("click", fetchWeatherIntoForm);
+$("trueBtn").addEventListener("click", doTruing);
+$("readTiltBtn").addEventListener("click", readTilt);
+
+// Profile picker
+$("profileSelect").addEventListener("change", (e) => {
+  activeId = e.target.value;
+  Storage.setActiveId(activeId);
+});
+$("newProfileBtn").addEventListener("click", () => openProfileForm(null));
+$("editProfileBtn").addEventListener("click", () => openProfileForm(getActiveProfile()));
+$("deleteProfileBtn").addEventListener("click", deleteActiveProfile);
+$("saveProfileBtn").addEventListener("click", saveProfileFromForm);
+$("cancelProfileBtn").addEventListener("click", closeProfileForm);
+
+// Altitude → pressure helper
+$("altToPressureBtn").addEventListener("click", () => {
+  const alt = Number($("altitude").value);
+  $("pressure").value = Ballistics.pressureForAltitude(alt).toFixed(2);
+});
+
+// Go to the HUD
+$("goHudBtn").addEventListener("click", () => {
+  hudDistanceYd = Number($("targetDistance").value);
+  renderHud();
+  showScreen("hud");
+});
+
+// HUD actions, defined once so taps, keys, and gestures all reuse them.
+function stepDistance(deltaYd) {
+  hudDistanceYd = Math.max(0, Math.min(1200, hudDistanceYd + deltaYd));
+  renderHud();
+}
+function speakHud() {
+  if (lastSpeech) Platform.speak(lastSpeech);
+}
+function hudToSetup() {
+  showScreen("setup");
+}
+
+$("plus25").addEventListener("click", () => stepDistance(25));
+$("minus25").addEventListener("click", () => stepDistance(-25));
+$("hudSpeak").addEventListener("click", speakHud);
+$("hudBack").addEventListener("click", hudToSetup);
+
+// Route keyboard / swipe / (future) Neural Band input to those same actions.
+// This only matters while the HUD is visible.
+Platform.bindInputs({
+  onNext: () => { if (!$("hud").classList.contains("hidden")) stepDistance(25); },
+  onPrev: () => { if (!$("hud").classList.contains("hidden")) stepDistance(-25); },
+  onSelect: () => { if (!$("hud").classList.contains("hidden")) speakHud(); },
+  onBack: () => { if (!$("hud").classList.contains("hidden")) hudToSetup(); }
+});
+
+// DOPE table
+$("goDopeBtn").addEventListener("click", () => {
+  renderDope();
+  showScreen("dope");
+});
+$("dopeBack").addEventListener("click", () => showScreen("setup"));
+
+/* -------------------------------------------------------------------------
+   STARTUP
+   Fill the dropdown and show the setup screen.
+   ------------------------------------------------------------------------- */
+refreshProfileSelect();
+showScreen("setup");
+
+/* -------------------------------------------------------------------------
+   OFFLINE SUPPORT
+   -------------------------------------------------------------------------
+   A "service worker" is a tiny script the browser keeps running in the
+   background; ours caches the app files so RangeHUD opens with no signal —
+   exactly what you want at a range. Service workers need a real web address,
+   so this is skipped when you open the file directly (file://). To use it,
+   serve the folder locally (see the notes I gave you).
+   ------------------------------------------------------------------------- */
+if ("serviceWorker" in navigator && location.protocol !== "file:") {
+  navigator.serviceWorker.register("sw.js").catch(function () {
+    /* ignore registration errors — the app still works online */
+  });
+}
