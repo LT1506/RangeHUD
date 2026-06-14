@@ -729,6 +729,7 @@ showScreen("setup");
 // glasses (read it at the bottom of the Setup screen).
 const APP_VERSION = "v6";
 $("buildTag").textContent = "RangeHUD " + APP_VERSION;
+$("appTitle").textContent = "RangeHUD " + APP_VERSION;  // version up top, easy to spot
 
 // Form navigation for keyboard / Neural-Band swipes. Enabled EVERYWHERE (not
 // just ?glasses=1): on the real glasses you load the plain URL, and this is
