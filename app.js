@@ -725,29 +725,37 @@ $("shotList").addEventListener("click", (e) => {
 refreshProfileSelect();
 showScreen("setup");
 
-// Glasses preview: when opened with ?glasses=1, tag the page so the CSS can
-// shrink the HUD into a small monocular-lens-sized box. Lets us design to the
-// real constraint before we have hardware.
+// Show which build is loaded — lets us confirm an update actually reached the
+// glasses (read it at the bottom of the Setup screen).
+const APP_VERSION = "v5";
+$("buildTag").textContent = "RangeHUD " + APP_VERSION;
+
+// Form navigation for keyboard / Neural-Band swipes. Enabled EVERYWHERE (not
+// just ?glasses=1): on the real glasses you load the plain URL, and this is
+// what lets a swipe move OFF a number field instead of being trapped changing
+// its value. It's inert with touch/mouse and only touches the keys/scroll that
+// would otherwise trap you. The cosmetic lens-sizing still waits for ?glasses=1.
+enableFormKeyNav();
 if (Platform.isGlasses()) {
   document.body.classList.add("glasses");
-  enableGlassesFormNav();
 }
 
 /* -------------------------------------------------------------------------
-   GLASSES FORM NAVIGATION
+   FORM KEY / SWIPE NAVIGATION
    -------------------------------------------------------------------------
-   The Neural Band sends swipes as arrow keys. A native number field eats those
-   to change its value / move its text cursor, so you get stuck on it. We fix
-   the form screens with a consistent model that matches the band:
+   On the glasses the Neural Band has no pointer — you swipe. The problem: a
+   swipe lands on a focused number field and gets eaten (changing its value),
+   so you can't move on. We don't yet know for certain whether the band sends
+   swipes as ARROW KEYS or as SCROLL events, so we handle BOTH:
 
-       swipe UP / DOWN   -> change the value (number field or dropdown)
-       swipe LEFT / RIGHT -> move to the previous / next control
-       pinch (select)     -> presses the focused button (native Enter)
+       arrow Left/Right  -> move to previous / next control
+       arrow Up/Down     -> change a value field (native); move off anything else
+       scroll over a number field -> move focus instead of changing the value
 
-   This is scoped to glasses mode and to the form screens — the HUD keeps its
-   own swipe-to-step-distance behavior (wired in Platform.bindInputs).
+   The HUD is left alone (it has its own swipe-to-step-distance). Inert with a
+   mouse/touch on the phone, so it can't regress those.
    ------------------------------------------------------------------------- */
-function enableGlassesFormNav() {
+function enableFormKeyNav() {
   // All the controls you can land on, in the currently visible screen.
   function controls() {
     const screen = document.querySelector(".screen:not(.hidden)");
@@ -766,22 +774,33 @@ function enableGlassesFormNav() {
     els[i].scrollIntoView({ block: "center" });
   }
 
+  function isValueField(el) {
+    return el && (el.tagName === "SELECT" ||
+                  (el.tagName === "INPUT" && el.type === "number"));
+  }
+
+  // ---- If swipes arrive as ARROW KEYS ----
   document.addEventListener("keydown", (e) => {
-    // The HUD handles its own arrows (step distance), so leave it alone.
-    if (!$("hud").classList.contains("hidden")) return;
-
+    if (!$("hud").classList.contains("hidden")) return; // HUD handles its own
     const el = document.activeElement;
-    const isValueField =
-      el && (el.tagName === "SELECT" ||
-             (el.tagName === "INPUT" && el.type === "number"));
-
     if (e.key === "ArrowRight") { e.preventDefault(); moveFocus(1); }
     else if (e.key === "ArrowLeft") { e.preventDefault(); moveFocus(-1); }
     else if (e.key === "ArrowDown" || e.key === "ArrowUp") {
-      // Up/Down adjusts a value field (native). On buttons/text it just moves.
-      if (!isValueField) { e.preventDefault(); moveFocus(e.key === "ArrowDown" ? 1 : -1); }
+      // Up/Down edits a value field (native); on a button it just moves.
+      if (!isValueField(el)) { e.preventDefault(); moveFocus(e.key === "ArrowDown" ? 1 : -1); }
     }
   });
+
+  // ---- If swipes arrive as SCROLL/WHEEL events ----
+  // A focused number field changes its value on wheel; intercept that so a
+  // swipe moves between fields instead of being trapped.
+  document.addEventListener("wheel", (e) => {
+    if (!$("hud").classList.contains("hidden")) return;
+    if (isValueField(document.activeElement)) {
+      e.preventDefault();
+      moveFocus(e.deltaY > 0 ? 1 : -1);
+    }
+  }, { passive: false });
 }
 
 /* -------------------------------------------------------------------------
