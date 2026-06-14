@@ -1,19 +1,19 @@
 /* =========================================================================
    sw.js  —  THE SERVICE WORKER (offline support)
    -------------------------------------------------------------------------
-   This script runs in the background, separate from the page. Its job is to
-   sit between the app and the network and answer requests from a cache so the
-   app works even with no internet.
+   This script runs in the background and sits between the app and the network.
 
-   Lifecycle: the browser fires "install" once, then "activate", then "fetch"
-   for every request the page makes.
+   STRATEGY: NETWORK-FIRST.
+   We always try to fetch the latest file from the network and only fall back
+   to the cached copy when you're offline. This matters a lot for the glasses:
+   they load the app from our URL, so we must NOT pin an old cached version
+   (an earlier "cache-first" version did exactly that and froze the app).
    ========================================================================= */
 
-// Bump this version string whenever you change the cached files, so the
-// browser throws away the old cache and grabs the new one.
-const CACHE_NAME = "rangehud-v5";
+// Bump this whenever the cached file list changes.
+const CACHE_NAME = "rangehud-v6";
 
-// The "app shell": every file needed to run RangeHUD offline.
+// The "app shell": everything needed to run RangeHUD offline.
 const ASSETS = [
   "./",
   "./index.html",
@@ -28,15 +28,13 @@ const ASSETS = [
   "./icon-512.png"
 ];
 
-// INSTALL: download and store all the app files.
+// INSTALL: pre-cache the shell so an offline first-launch still works.
 self.addEventListener("install", (event) => {
-  event.waitUntil(
-    caches.open(CACHE_NAME).then((cache) => cache.addAll(ASSETS))
-  );
-  self.skipWaiting(); // activate the new worker immediately
+  event.waitUntil(caches.open(CACHE_NAME).then((cache) => cache.addAll(ASSETS)));
+  self.skipWaiting(); // take over right away
 });
 
-// ACTIVATE: delete any old caches from previous versions.
+// ACTIVATE: delete every old cache so stale code can't survive an update.
 self.addEventListener("activate", (event) => {
   event.waitUntil(
     caches.keys().then((keys) =>
@@ -46,25 +44,20 @@ self.addEventListener("activate", (event) => {
   self.clients.claim();
 });
 
-// FETCH: answer requests. We use "cache first" for our own files (instant,
-// offline), but let anything cross-origin (like the weather API) go straight
-// to the network so live data still works when you're online.
+// FETCH: network-first for our own files; let cross-origin (weather) pass through.
 self.addEventListener("fetch", (event) => {
   const url = new URL(event.request.url);
   if (event.request.method !== "GET" || url.origin !== location.origin) {
-    return; // not ours — let the browser handle it normally
+    return; // not ours — normal handling (e.g. the weather API)
   }
   event.respondWith(
-    caches.match(event.request).then((cached) => {
-      return (
-        cached ||
-        fetch(event.request).then((response) => {
-          // Save a copy for next time, then return the response.
-          const copy = response.clone();
-          caches.open(CACHE_NAME).then((cache) => cache.put(event.request, copy));
-          return response;
-        })
-      );
-    })
+    fetch(event.request)
+      .then((response) => {
+        // Got it from the network — refresh the cache and return it.
+        const copy = response.clone();
+        caches.open(CACHE_NAME).then((cache) => cache.put(event.request, copy));
+        return response;
+      })
+      .catch(() => caches.match(event.request)) // offline — use the cached copy
   );
 });

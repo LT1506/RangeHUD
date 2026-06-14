@@ -727,7 +727,7 @@ showScreen("setup");
 
 // Show which build is loaded — lets us confirm an update actually reached the
 // glasses (read it at the bottom of the Setup screen).
-const APP_VERSION = "v5";
+const APP_VERSION = "v6";
 $("buildTag").textContent = "RangeHUD " + APP_VERSION;
 
 // Form navigation for keyboard / Neural-Band swipes. Enabled EVERYWHERE (not
