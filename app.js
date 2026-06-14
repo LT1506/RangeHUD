@@ -61,6 +61,7 @@ function getConditions() {
 
   return {
     windSpeedMph: windSpeedMph,
+    windClock: clock,
     crosswindMph: windSpeedMph * Math.abs(sideways),
     windSide: windSide,
     tempF: Number($("temp").value),
@@ -281,13 +282,21 @@ async function getWeather(lat, lon) {
 }
 
 // The button handler: tie it all together and fill in the fields.
+// Remember the location from the first lookup so repeat weather pulls (the
+// HUD's auto-wind) don't re-prompt for GPS every time.
+let lastCoords = null;
+async function getLocationCached() {
+  if (!lastCoords) lastCoords = await getLocation();
+  return lastCoords;
+}
+
 async function fetchWeatherIntoForm() {
   const btn = $("getWeatherBtn");
   const original = btn.textContent;
   btn.disabled = true;
   btn.textContent = "Getting weather…";
   try {
-    const where = await getLocation();
+    const where = await getLocationCached();
     const w = await getWeather(where.lat, where.lon);
 
     $("temp").value = Math.round(w.tempF);
@@ -305,6 +314,44 @@ async function fetchWeatherIntoForm() {
   } finally {
     // Re-enable after a moment so you can see the result.
     setTimeout(() => { btn.textContent = original; btn.disabled = false; }, 1500);
+  }
+}
+
+/* -------------------------------------------------------------------------
+   REAL-TIME WIND (auto-refresh)
+   -------------------------------------------------------------------------
+   When toggled on, re-pull the current weather every 30 seconds (reusing the
+   cached location) and update the wind so the HUD's holdover stays live. We
+   keep your wind DIRECTION (the clock) and only refresh the speed + air, then
+   re-render the HUD.
+   ------------------------------------------------------------------------- */
+let windTimer = null;
+
+async function refreshWindOnly() {
+  try {
+    const where = await getLocationCached();
+    const w = await getWeather(where.lat, where.lon);
+    $("windSpeed").value = Math.round(w.windMph);
+    $("temp").value = Math.round(w.tempF);
+    $("pressure").value = w.pressureInHg.toFixed(2);
+    if (!$("hud").classList.contains("hidden")) renderHud();
+  } catch (e) {
+    /* offline or denied — just keep the last values */
+  }
+}
+
+function stopAutoWind() {
+  if (windTimer) { clearInterval(windTimer); windTimer = null; }
+  $("autoWindBtn").textContent = "Auto-wind: off";
+}
+
+function toggleAutoWind() {
+  if (windTimer) {
+    stopAutoWind();
+  } else {
+    $("autoWindBtn").textContent = "Auto-wind: on";
+    refreshWindOnly();                              // update immediately
+    windTimer = setInterval(refreshWindOnly, 30000); // then every 30s
   }
 }
 
@@ -375,10 +422,10 @@ function doTruing() {
    target. We grab one reading, then stop listening. Desktops have no sensor,
    so we fail politely and let you type the angle instead.
    ------------------------------------------------------------------------- */
-function readTilt() {
+function readTilt(targetId) {
   function handle(e) {
     const angle = Math.round(Math.abs(e.beta || 0));
-    $("incline").value = angle;
+    $(targetId).value = angle;
     window.removeEventListener("deviceorientation", handle);
   }
   // iOS requires asking permission first.
@@ -403,7 +450,8 @@ function readTilt() {
    ------------------------------------------------------------------------- */
 $("getWeatherBtn").addEventListener("click", fetchWeatherIntoForm);
 $("trueBtn").addEventListener("click", doTruing);
-$("readTiltBtn").addEventListener("click", readTilt);
+$("readTiltBtn").addEventListener("click", () => readTilt("incline"));
+$("autoWindBtn").addEventListener("click", toggleAutoWind);
 
 // Profile picker
 $("profileSelect").addEventListener("change", (e) => {
@@ -438,6 +486,7 @@ function speakHud() {
   if (lastSpeech) Platform.speak(lastSpeech);
 }
 function hudToSetup() {
+  stopAutoWind();   // don't keep polling weather after we leave the HUD
   showScreen("setup");
 }
 
@@ -461,6 +510,207 @@ $("goDopeBtn").addEventListener("click", () => {
   showScreen("dope");
 });
 $("dopeBack").addEventListener("click", () => showScreen("setup"));
+
+
+/* =========================================================================
+   LOG SHOT  —  record where a shot actually hit
+   =========================================================================
+   When you tap "Log shot" on the HUD, we freeze the current situation
+   (profile, conditions, distance, and the hold we showed) so the saved record
+   reflects exactly what you were holding when you fired.
+   ------------------------------------------------------------------------- */
+let logContext = null;        // the frozen situation for the shot being logged
+let impactOffset = null;      // { wind, elev } in mils, set by tapping the grid
+let currentHit = true;        // Hit (true) or Miss (false)
+
+function clamp(value, lo, hi) { return Math.max(lo, Math.min(hi, value)); }
+
+function updateHitButtons() {
+  $("markHit").classList.toggle("primary", currentHit);
+  $("markMiss").classList.toggle("primary", !currentHit);
+}
+
+function openLogShot() {
+  const profile = getActiveProfile();
+  const conditions = getConditions();
+  const hold = Ballistics.solve(profile, conditions).holdAt(hudDistanceYd);
+  logContext = { profile: profile, conditions: conditions, distanceYd: hudDistanceYd, hold: hold };
+
+  // Reset the form.
+  impactOffset = null;
+  currentHit = true;
+  updateHitButtons();
+  $("impactDot").style.display = "none";
+  $("impactReadout").textContent = "No impact set";
+  $("logAngle").value = conditions.inclineDeg || 0;
+
+  $("logContext").textContent = hudDistanceYd + " yd · " + profile.name;
+  const windTxt = (Math.abs(hold.driftMil) < 0.05)
+    ? "calm" : conditions.windSide + " " + Math.abs(hold.driftMil).toFixed(1) + " mil";
+  $("logPredicted").textContent = "You held: UP " + hold.dropMil.toFixed(1) + " mil · wind " + windTxt;
+
+  showScreen("logshot");
+}
+
+// Convert a tap on the SVG target into a mil offset and show it.
+function onGridTap(clientX, clientY) {
+  const grid = $("impactGrid");
+  const rect = grid.getBoundingClientRect();
+  const fx = (clientX - rect.left) / rect.width;   // 0..1 left→right
+  const fy = (clientY - rect.top) / rect.height;   // 0..1 top→bottom
+  const windMil = clamp(-3 + fx * 6, -3, 3);       // viewBox spans -3..3 mils
+  const elevMil = clamp(-(-3 + fy * 6), -3, 3);    // invert: up is positive
+  impactOffset = { wind: windMil, elev: elevMil };
+
+  const dot = $("impactDot");
+  dot.setAttribute("cx", windMil);
+  dot.setAttribute("cy", -elevMil);  // screen y is inverted again for drawing
+  dot.style.display = "";
+
+  const dist = logContext ? logContext.distanceYd : 100;
+  const inPerMil = 0.036 * dist;     // 1 mil ≈ 3.6 in at 100 yd
+  $("impactReadout").textContent =
+    Math.abs(windMil).toFixed(1) + " mil " + (windMil >= 0 ? "R" : "L") + ", " +
+    Math.abs(elevMil).toFixed(1) + " mil " + (elevMil >= 0 ? "high" : "low") +
+    "  (" + Math.abs(windMil * inPerMil).toFixed(1) + "\" / " +
+    Math.abs(elevMil * inPerMil).toFixed(1) + "\" @ " + dist + " yd)";
+}
+
+function saveShot() {
+  if (!impactOffset) { alert("Tap where the shot hit first."); return; }
+  const c = logContext;
+  Shots.addShot({
+    id: "s" + Date.now(),
+    timestamp: new Date().toISOString(),
+    profileName: c.profile.name,
+    distanceYd: c.distanceYd,
+    windSpeedMph: c.conditions.windSpeedMph,
+    windClock: c.conditions.windClock,
+    windSide: c.conditions.windSide,
+    tempF: c.conditions.tempF,
+    pressureInHg: c.conditions.pressureInHg,
+    shotAngleDeg: Number($("logAngle").value),
+    predDropMil: c.hold.dropMil,
+    predWindMil: Math.abs(c.hold.driftMil),
+    hit: currentHit,
+    offsetWindMil: impactOffset.wind,
+    offsetElevMil: impactOffset.elev
+  });
+  showScreen("hud");   // back to the HUD, ready for the next shot
+}
+
+$("hudLog").addEventListener("click", openLogShot);
+$("impactGrid").addEventListener("click", (e) => onGridTap(e.clientX, e.clientY));
+$("markHit").addEventListener("click", () => { currentHit = true; updateHitButtons(); });
+$("markMiss").addEventListener("click", () => { currentHit = false; updateHitButtons(); });
+$("logReadTilt").addEventListener("click", () => readTilt("logAngle"));
+$("saveShotBtn").addEventListener("click", saveShot);
+$("cancelShotBtn").addEventListener("click", () => showScreen("hud"));
+
+
+/* =========================================================================
+   RANGE LOG / ANALYSIS
+   ========================================================================= */
+function renderAnalysis() {
+  const shots = Shots.loadShots();
+
+  // Build the Profile filter from the names that actually appear.
+  const profileNames = [];
+  shots.forEach((s) => { if (profileNames.indexOf(s.profileName) === -1) profileNames.push(s.profileName); });
+  fillSelect("analysisProfile", ["ALL"].concat(profileNames), "All profiles");
+
+  // Build the Distance filter from the distances that actually appear.
+  const distances = [];
+  shots.forEach((s) => { if (distances.indexOf(s.distanceYd) === -1) distances.push(s.distanceYd); });
+  distances.sort((a, b) => a - b);
+  fillSelect("analysisDistance", ["ALL"].concat(distances), "All distances");
+
+  applyAnalysisFilters();
+}
+
+// Helper: refill a <select> with options (value ALL shows the given label).
+function fillSelect(id, values, allLabel) {
+  const sel = $(id);
+  sel.innerHTML = "";
+  values.forEach((v) => {
+    const o = document.createElement("option");
+    o.value = v;
+    o.textContent = (v === "ALL") ? allLabel : (typeof v === "number" ? v + " yd" : v);
+    sel.appendChild(o);
+  });
+}
+
+function applyAnalysisFilters() {
+  let shots = Shots.loadShots();
+  const pf = $("analysisProfile").value;
+  const df = $("analysisDistance").value;
+  if (pf !== "ALL") shots = shots.filter((s) => s.profileName === pf);
+  if (df !== "ALL") shots = shots.filter((s) => String(s.distanceYd) === df);
+
+  const stats = Shots.analyze(shots);
+
+  // ---- Summary stats ----
+  const sum = $("analysisSummary");
+  if (!stats.count) {
+    sum.innerHTML = "<p class='hint'>No shots match. Log some from the HUD.</p>";
+  } else {
+    const biasW = Math.abs(stats.biasWindMil).toFixed(1) + " " + (stats.biasWindMil >= 0 ? "R" : "L");
+    const biasE = Math.abs(stats.biasElevMil).toFixed(1) + " " + (stats.biasElevMil >= 0 ? "high" : "low");
+    sum.innerHTML =
+      "<div class='stat-grid'>" +
+      stat(stats.count, "shots") +
+      stat(Math.round(stats.hitRate * 100) + "%", "hit rate") +
+      stat(biasE + " / " + biasW, "group center (bias)") +
+      stat(stats.precisionMeanMil.toFixed(1) + " mil", "avg spread (precision)") +
+      "</div>";
+  }
+
+  // ---- Coaching insights ----
+  const ins = Shots.insights(stats);
+  $("analysisInsights").innerHTML = ins.map((t) => "<p class='insight'>• " + t + "</p>").join("");
+
+  // ---- Shot list (newest first) ----
+  const body = $("shotList");
+  body.innerHTML = "";
+  shots.slice().reverse().forEach((s) => {
+    const when = new Date(s.timestamp);
+    const stamp = (when.getMonth() + 1) + "/" + when.getDate() + " " +
+                  when.getHours() + ":" + String(when.getMinutes()).padStart(2, "0");
+    const off = Math.abs(s.offsetWindMil).toFixed(1) + (s.offsetWindMil >= 0 ? "R" : "L") + " " +
+                Math.abs(s.offsetElevMil).toFixed(1) + (s.offsetElevMil >= 0 ? "↑" : "↓");
+    const row = document.createElement("tr");
+    row.innerHTML =
+      "<td>" + stamp + "</td>" +
+      "<td>" + s.distanceYd + "</td>" +
+      "<td>" + (s.hit ? "Hit" : "Miss") + "</td>" +
+      "<td>" + off + "</td>" +
+      "<td><button class='del-btn' data-id='" + s.id + "'>✕</button></td>";
+    body.appendChild(row);
+  });
+}
+
+// One summary tile.
+function stat(num, label) {
+  return "<div class='stat'><div class='num'>" + num + "</div><div class='lbl'>" + label + "</div></div>";
+}
+
+$("goAnalysisBtn").addEventListener("click", () => { renderAnalysis(); showScreen("analysis"); });
+$("analysisProfile").addEventListener("change", applyAnalysisFilters);
+$("analysisDistance").addEventListener("change", applyAnalysisFilters);
+$("analysisBack").addEventListener("click", () => showScreen("setup"));
+$("clearShotsBtn").addEventListener("click", () => {
+  if (confirm("Delete ALL logged shots? This can't be undone.")) {
+    Shots.clearShots();
+    renderAnalysis();
+  }
+});
+// Delete a single shot (the buttons are created dynamically, so we listen on
+// the table and check what was clicked — this is called "event delegation").
+$("shotList").addEventListener("click", (e) => {
+  const id = e.target.getAttribute("data-id");
+  if (id) { Shots.deleteShot(id); applyAnalysisFilters(); }
+});
+
 
 /* -------------------------------------------------------------------------
    STARTUP

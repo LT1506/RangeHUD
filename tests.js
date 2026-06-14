@@ -90,6 +90,33 @@ const cold = Ballistics.solve(SIX5, conditions(0, 12, 0, 10, 29.92)).holdAt(1000
 const hot = Ballistics.solve(SIX5, conditions(0, 12, 0, 100, 29.92)).holdAt(1000).dropMil;
 check("colder air drops more than hot air", cold > hot);
 
+// ---- Shot-log analytics ---------------------------------------------------
+const Shots = require("./shots.js");
+
+// Helper to fake a shot with a given impact offset (mils) and hit flag.
+function shot(windMil, elevMil, hit) {
+  return { offsetWindMil: windMil, offsetElevMil: elevMil, hit: hit, distanceYd: 500 };
+}
+
+// A group consistently 0.5 mil low should report that as elevation bias.
+const lowGroup = [shot(0, -0.5, true), shot(0.1, -0.4, true), shot(-0.1, -0.6, false)];
+const lowStats = Shots.analyze(lowGroup);
+near("analyze: detects low bias", lowStats.biasElevMil, -0.5, 0.1);
+near("analyze: hit rate", lowStats.hitRate, 2 / 3, 0.01);
+check("analyze: low-bias insight mentions coming up",
+      Shots.insights(lowStats).some((t) => t.toLowerCase().includes("up")));
+
+// A centered but scattered group: tiny bias, larger spread -> technique tip.
+const looseGroup = [shot(1, 1, true), shot(-1, -1, true), shot(1, -1, false), shot(-1, 1, true)];
+const looseStats = Shots.analyze(looseGroup);
+near("analyze: centered group has ~0 bias", looseStats.biasMag, 0, 0.05);
+check("analyze: wide spread flagged", looseStats.precisionMeanMil > 1.0);
+check("analyze: spread insight mentions fundamentals/spread",
+      Shots.insights(looseStats).some((t) => /spread|fundamental/i.test(t)));
+
+// Empty input is handled gracefully.
+check("analyze: empty list -> count 0", Shots.analyze([]).count === 0);
+
 // ---- Summary --------------------------------------------------------------
 console.log("\n" + passed + " passed, " + failed + " failed\n");
 process.exit(failed > 0 ? 1 : 0);

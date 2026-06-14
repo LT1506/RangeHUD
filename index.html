@@ -142,6 +142,7 @@
       <div class="button-row">
         <button id="goHudBtn" class="primary">Open HUD &rarr;</button>
         <button id="goDopeBtn">DOPE table</button>
+        <button id="goAnalysisBtn">Range log</button>
       </div>
     </div>
   </section>
@@ -174,7 +175,79 @@
 
     <div class="button-row">
       <button id="hudSpeak" class="ghost">&#128266; Speak</button>
+      <button id="autoWindBtn" class="ghost">Auto-wind: off</button>
+      <button id="hudLog" class="ghost">Log shot</button>
       <button id="hudBack" class="ghost">&larr; Setup</button>
+    </div>
+  </section>
+
+
+  <!-- =====================================================================
+       SCREEN 4: LOG SHOT  (record where a shot actually hit)
+       The target circle is in MILS: each ring is 1 mil. Center = your aim.
+       ===================================================================== -->
+  <section id="logshot" class="screen hidden">
+    <h1>Log Shot</h1>
+    <p class="hint" id="logContext">&mdash;</p>
+    <p class="hint" id="logPredicted">&mdash;</p>
+
+    <p class="hint">Tap where it hit (center = point of aim, each ring = 1 mil):</p>
+    <svg id="impactGrid" viewBox="-3 -3 6 6" width="260" height="260" aria-label="impact grid">
+      <circle cx="0" cy="0" r="3" class="ring" />
+      <circle cx="0" cy="0" r="2" class="ring" />
+      <circle cx="0" cy="0" r="1" class="ring" />
+      <line x1="-3" y1="0" x2="3" y2="0" class="cross" />
+      <line x1="0" y1="-3" x2="0" y2="3" class="cross" />
+      <circle id="impactDot" cx="0" cy="0" r="0.22" class="dot" style="display:none" />
+    </svg>
+    <p id="impactReadout" class="hint">No impact set</p>
+
+    <label>Result</label>
+    <div class="button-row">
+      <button id="markHit" class="primary">Hit</button>
+      <button id="markMiss">Miss</button>
+    </div>
+
+    <label for="logAngle">Shot angle (degrees)</label>
+    <input id="logAngle" type="number" step="1" value="0" />
+    <button id="logReadTilt">Capture angle from glasses tilt</button>
+
+    <div class="button-row">
+      <button id="saveShotBtn" class="primary">Save shot</button>
+      <button id="cancelShotBtn">Cancel</button>
+    </div>
+  </section>
+
+
+  <!-- =====================================================================
+       SCREEN 5: RANGE LOG / ANALYSIS
+       ===================================================================== -->
+  <section id="analysis" class="screen hidden">
+    <h1>Range Log</h1>
+
+    <div class="card">
+      <label for="analysisProfile">Profile</label>
+      <select id="analysisProfile"></select>
+      <label for="analysisDistance">Distance</label>
+      <select id="analysisDistance"></select>
+    </div>
+
+    <div id="analysisSummary" class="card"></div>
+    <div id="analysisInsights" class="card"></div>
+
+    <h2>Shots</h2>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr><th>When</th><th>Yds</th><th>Result</th><th>Impact (mil)</th><th></th></tr>
+        </thead>
+        <tbody id="shotList"></tbody>
+      </table>
+    </div>
+
+    <div class="button-row">
+      <button id="clearShotsBtn" class="danger">Clear all</button>
+      <button id="analysisBack" class="ghost">&larr; Setup</button>
     </div>
   </section>
 
@@ -207,6 +280,7 @@
        exist BEFORE app.js tries to use them. -->
   <script src="ballistics.js"></script>
   <script src="storage.js"></script>
+  <script src="shots.js"></script>
   <script src="platform.js"></script>
   <script src="app.js"></script>
 </body>

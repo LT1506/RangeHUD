@@ -211,3 +211,38 @@ body.glasses .hud-sub { font-size: 0.85rem; }
 body.glasses .step-btn { width: 44px; height: 44px; font-size: 1rem; }
 /* On the real glasses, swipes/voice replace these — hide to mimic that. */
 body.glasses #hud .button-row { display: none; }
+
+
+/* =========================================================================
+   LOG SHOT  —  the impact target
+   -------------------------------------------------------------------------
+   The SVG uses a coordinate system measured in MILS (viewBox -3..3), so the
+   rings land exactly on whole-mil distances and a tapped point converts to a
+   mil offset with no fuss.
+   ========================================================================= */
+#impactGrid {
+  display: block;
+  margin: 6px auto 4px;
+  background: #0c0f13;
+  border-radius: 50%;
+  touch-action: manipulation;   /* taps register instantly, no zoom delay */
+  cursor: crosshair;
+}
+.ring  { fill: none; stroke: #2c343d; stroke-width: 0.03; }
+.cross { stroke: #2c343d; stroke-width: 0.03; }
+.dot   { fill: var(--accent); stroke: #000; stroke-width: 0.04; }
+#impactReadout { text-align: center; font-size: 0.95rem; color: var(--text); }
+
+
+/* =========================================================================
+   RANGE LOG / ANALYSIS
+   ========================================================================= */
+.stat-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px 14px;
+}
+.stat .num { font-size: 1.5rem; font-weight: 700; color: var(--accent); }
+.stat .lbl { font-size: 0.75rem; color: var(--muted); text-transform: uppercase; letter-spacing: 0.08em; }
+.insight { margin: 6px 0; line-height: 1.35; }
+.del-btn { padding: 4px 8px; font-size: 0.8rem; color: var(--danger); border-color: var(--danger); }
