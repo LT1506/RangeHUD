@@ -34,6 +34,12 @@ let editingId = null;                    // which profile the form is editing (n
 function showScreen(id) {
   document.querySelectorAll(".screen").forEach((s) => s.classList.add("hidden"));
   $(id).classList.remove("hidden");
+  // On the glasses there's no touch — put the cursor on the first control so a
+  // swipe has somewhere to start from.
+  if (document.body.classList.contains("glasses")) {
+    const first = $(id).querySelector("input, select, button");
+    if (first) first.focus();
+  }
 }
 
 /* -------------------------------------------------------------------------
@@ -724,6 +730,58 @@ showScreen("setup");
 // real constraint before we have hardware.
 if (Platform.isGlasses()) {
   document.body.classList.add("glasses");
+  enableGlassesFormNav();
+}
+
+/* -------------------------------------------------------------------------
+   GLASSES FORM NAVIGATION
+   -------------------------------------------------------------------------
+   The Neural Band sends swipes as arrow keys. A native number field eats those
+   to change its value / move its text cursor, so you get stuck on it. We fix
+   the form screens with a consistent model that matches the band:
+
+       swipe UP / DOWN   -> change the value (number field or dropdown)
+       swipe LEFT / RIGHT -> move to the previous / next control
+       pinch (select)     -> presses the focused button (native Enter)
+
+   This is scoped to glasses mode and to the form screens — the HUD keeps its
+   own swipe-to-step-distance behavior (wired in Platform.bindInputs).
+   ------------------------------------------------------------------------- */
+function enableGlassesFormNav() {
+  // All the controls you can land on, in the currently visible screen.
+  function controls() {
+    const screen = document.querySelector(".screen:not(.hidden)");
+    if (!screen) return [];
+    return Array.prototype.slice
+      .call(screen.querySelectorAll("input, select, button"))
+      .filter((el) => el.offsetParent !== null && !el.disabled); // visible + enabled
+  }
+
+  function moveFocus(delta) {
+    const els = controls();
+    if (els.length === 0) return;
+    let i = els.indexOf(document.activeElement);
+    i = (i + delta + els.length) % els.length; // wrap around the list
+    els[i].focus();
+    els[i].scrollIntoView({ block: "center" });
+  }
+
+  document.addEventListener("keydown", (e) => {
+    // The HUD handles its own arrows (step distance), so leave it alone.
+    if (!$("hud").classList.contains("hidden")) return;
+
+    const el = document.activeElement;
+    const isValueField =
+      el && (el.tagName === "SELECT" ||
+             (el.tagName === "INPUT" && el.type === "number"));
+
+    if (e.key === "ArrowRight") { e.preventDefault(); moveFocus(1); }
+    else if (e.key === "ArrowLeft") { e.preventDefault(); moveFocus(-1); }
+    else if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+      // Up/Down adjusts a value field (native). On buttons/text it just moves.
+      if (!isValueField) { e.preventDefault(); moveFocus(e.key === "ArrowDown" ? 1 : -1); }
+    }
+  });
 }
 
 /* -------------------------------------------------------------------------

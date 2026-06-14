@@ -195,6 +195,14 @@ tbody tr:nth-child(even) { background: #191e25; } /* zebra stripes = easier to r
    ========================================================================= */
 body.glasses { background: #000; }
 
+/* On the glasses you navigate by swiping between controls — make the currently
+   selected one impossible to miss. */
+body.glasses :focus {
+  outline: 3px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: 6px;
+}
+
 body.glasses #hud {
   width: 360px;
   height: 280px;

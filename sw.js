@@ -11,7 +11,7 @@
 
 // Bump this version string whenever you change the cached files, so the
 // browser throws away the old cache and grabs the new one.
-const CACHE_NAME = "rangehud-v3";
+const CACHE_NAME = "rangehud-v4";
 
 // The "app shell": every file needed to run RangeHUD offline.
 const ASSETS = [
