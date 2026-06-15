@@ -131,6 +131,13 @@ button:active { transform: translateY(1px); } /* tiny press feedback */
 }
 .hud-distance .unit { font-size: 1.2rem; color: var(--muted); margin-left: 4px; }
 
+.hud-tip {
+  font-size: 0.8rem;
+  letter-spacing: 0.1em;
+  color: var(--muted);
+  margin-top: -8px;
+}
+
 .step-btn {
   font-size: 1.3rem;
   font-weight: 700;

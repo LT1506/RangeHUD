@@ -496,8 +496,6 @@ function hudToSetup() {
   showScreen("setup");
 }
 
-$("plus25").addEventListener("click", () => stepDistance(25));
-$("minus25").addEventListener("click", () => stepDistance(-25));
 $("hudSpeak").addEventListener("click", speakHud);
 $("hudBack").addEventListener("click", hudToSetup);
 
@@ -773,7 +771,7 @@ showScreen("setup");
 
 // Show which build is loaded — lets us confirm an update actually reached the
 // glasses (read it at the bottom of the Setup screen).
-const APP_VERSION = "v8";
+const APP_VERSION = "v9";
 $("buildTag").textContent = "RangeHUD " + APP_VERSION;
 $("appTitle").textContent = "RangeHUD " + APP_VERSION;  // version up top, easy to spot
 
