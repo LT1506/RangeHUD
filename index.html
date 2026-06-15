@@ -192,32 +192,39 @@
     <p class="hint" id="logContext">&mdash;</p>
     <p class="hint" id="logPredicted">&mdash;</p>
 
-    <p class="hint">Move the dot to where it hit — center = your aim, each ring = 1 mil.
-      Tap it (phone), or <b>swipe</b> to nudge (glasses).</p>
-    <p class="hint">Glasses: <b>pinch</b> = save · <b>double-pinch</b> = Hit/Miss · <b>back</b> = cancel</p>
-    <svg id="impactGrid" viewBox="-3 -3 6 6" width="260" height="260" aria-label="impact grid">
-      <circle cx="0" cy="0" r="3" class="ring" />
-      <circle cx="0" cy="0" r="2" class="ring" />
-      <circle cx="0" cy="0" r="1" class="ring" />
-      <line x1="-3" y1="0" x2="3" y2="0" class="cross" />
-      <line x1="0" y1="-3" x2="0" y2="3" class="cross" />
-      <circle id="impactDot" cx="0" cy="0" r="0.22" class="dot" style="display:none" />
-    </svg>
-    <p id="impactReadout" class="hint">No impact set</p>
+    <!-- STEP 1: place the impact dot -->
+    <div id="logPlace">
+      <p class="hint">Move the dot to where it hit — center = your aim, each ring = 1 mil.
+        Tap it (phone) or <b>swipe</b> to nudge (glasses). <b>Pinch</b> when done · <b>back</b> cancels.</p>
+      <svg id="impactGrid" viewBox="-3 -3 6 6" width="260" height="260" aria-label="impact grid">
+        <circle cx="0" cy="0" r="3" class="ring" />
+        <circle cx="0" cy="0" r="2" class="ring" />
+        <circle cx="0" cy="0" r="1" class="ring" />
+        <line x1="-3" y1="0" x2="3" y2="0" class="cross" />
+        <line x1="0" y1="-3" x2="0" y2="3" class="cross" />
+        <circle id="impactDot" cx="0" cy="0" r="0.22" class="dot" style="display:none" />
+      </svg>
+      <p id="impactReadout" class="hint">&mdash;</p>
 
-    <label>Result</label>
-    <div class="button-row">
-      <button id="markHit" class="primary">Hit</button>
-      <button id="markMiss">Miss</button>
+      <label for="logAngle">Shot angle (degrees)</label>
+      <input id="logAngle" type="number" step="1" value="0" />
+      <button id="logReadTilt">Capture angle from glasses tilt</button>
+
+      <div class="button-row">
+        <button id="toResultBtn" class="primary">Next &rarr;</button>
+        <button id="cancelShotBtn">Cancel</button>
+      </div>
     </div>
 
-    <label for="logAngle">Shot angle (degrees)</label>
-    <input id="logAngle" type="number" step="1" value="0" />
-    <button id="logReadTilt">Capture angle from glasses tilt</button>
-
-    <div class="button-row">
-      <button id="saveShotBtn" class="primary">Save shot</button>
-      <button id="cancelShotBtn">Cancel</button>
+    <!-- STEP 2: was it a hit or a miss? (each choice saves) -->
+    <div id="logResult" class="hidden">
+      <p class="hint" id="logResultSummary">&mdash;</p>
+      <p class="hint"><b>Swipe</b> to highlight, <b>pinch</b> to choose · <b>back</b> to re-place.</p>
+      <div class="button-row" style="flex-direction:column">
+        <button id="saveHitBtn" class="primary">&#10003; Save as HIT</button>
+        <button id="saveMissBtn">&#10007; Save as MISS</button>
+        <button id="backToPlaceBtn">&larr; Re-place dot</button>
+      </div>
     </div>
   </section>
 

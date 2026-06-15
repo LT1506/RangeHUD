@@ -520,37 +520,22 @@ function moveHudFocus(delta) {
   els[i].focus();
 }
 
-// Single pinch vs double pinch. A double-pinch (two pinches within DOUBLE_MS)
-// jumps to Log Shot. To tell them apart we take over the Enter key on the HUD
-// and wait a beat: if a second pinch arrives we treat it as a double, otherwise
-// the single action runs. (Swappable for a native double-pinch event later.)
-const DOUBLE_MS = 300;
-let pinchTimer = null;
-
-function onHudPinch(e) {
-  if (!hudVisible()) return;          // forms keep native Enter (activates buttons)
-  if (e) e.preventDefault();          // we drive the action ourselves on the HUD
-
-  if (pinchTimer) {                   // this is the SECOND pinch -> double
-    clearTimeout(pinchTimer);
-    pinchTimer = null;
-    openLogShot();
-    return;
-  }
-  pinchTimer = setTimeout(() => {     // no second pinch -> single
-    pinchTimer = null;
-    const a = document.activeElement;
-    if (a && a.tagName === "BUTTON" && $("hud").contains(a)) a.click(); // press highlighted
-    else speakHud();                                                    // or read it aloud
-  }, DOUBLE_MS);
-}
-
+// (Double-pinch is unavailable: Meta's OS claims the thumb-index double-pinch
+// as a system gesture, so the web app never receives it. Everything uses single
+// pinch + swipes instead.)
 Platform.bindInputs({
   onUp:    () => { if (hudVisible()) stepDistance(25); },
   onDown:  () => { if (hudVisible()) stepDistance(-25); },
   onLeft:  () => { if (hudVisible()) moveHudFocus(-1); },
   onRight: () => { if (hudVisible()) moveHudFocus(1); },
-  onSelect: onHudPinch,
+  onSelect: () => {
+    if (!hudVisible()) return;
+    const a = document.activeElement;
+    // A highlighted button is pressed by the native Enter; otherwise pinch reads
+    // the solution aloud.
+    if (a && a.tagName === "BUTTON" && $("hud").contains(a)) return;
+    speakHud();
+  },
   onBack:  () => { if (hudVisible()) hudToSetup(); }
 });
 
@@ -570,14 +555,15 @@ $("dopeBack").addEventListener("click", () => showScreen("setup"));
    reflects exactly what you were holding when you fired.
    ------------------------------------------------------------------------- */
 let logContext = null;        // the frozen situation for the shot being logged
-let impactOffset = null;      // { wind, elev } in mils, set by tapping the grid
+let impactOffset = null;      // { wind, elev } in mils
 let currentHit = true;        // Hit (true) or Miss (false)
 
 function clamp(value, lo, hi) { return Math.max(lo, Math.min(hi, value)); }
 
-function updateHitButtons() {
-  $("markHit").classList.toggle("primary", currentHit);
-  $("markMiss").classList.toggle("primary", !currentHit);
+// Switch the Log Shot screen between its two steps.
+function showLogStep(step) {
+  $("logPlace").classList.toggle("hidden", step !== "place");
+  $("logResult").classList.toggle("hidden", step !== "result");
 }
 
 function openLogShot() {
@@ -586,11 +572,11 @@ function openLogShot() {
   const hold = Ballistics.solve(profile, conditions).holdAt(hudDistanceYd);
   logContext = { profile: profile, conditions: conditions, distanceYd: hudDistanceYd, hold: hold };
 
-  // Reset the form. The marker starts at dead center (point of aim); you then
-  // either tap (phone) or swipe (glasses) to move it to the real impact.
+  // Reset to step 1. The marker starts at dead center (point of aim); you then
+  // tap (phone) or swipe (glasses) to move it to the real impact.
   impactOffset = { wind: 0, elev: 0 };
   currentHit = true;
-  updateHitButtons();
+  showLogStep("place");
   renderImpact();
   $("logAngle").value = conditions.inclineDeg || 0;
 
@@ -641,9 +627,15 @@ function nudgeImpact(dWind, dElev) {
   renderImpact();
 }
 
-function toggleHit() {
-  currentHit = !currentHit;
-  updateHitButtons();
+// Move from "place the dot" to "hit or miss", filling in the summary.
+function goLogResult() {
+  if (!impactOffset) return;
+  const w = impactOffset.wind, e = impactOffset.elev;
+  $("logResultSummary").textContent =
+    "Impact " + Math.abs(w).toFixed(1) + " mil " + (w >= 0 ? "R" : "L") + ", " +
+    Math.abs(e).toFixed(1) + " mil " + (e >= 0 ? "high" : "low") + " — hit or miss?";
+  showLogStep("result");
+  $("saveHitBtn").focus();   // default highlight = Save as HIT
 }
 
 function saveShot() {
@@ -671,11 +663,12 @@ function saveShot() {
 
 $("hudLog").addEventListener("click", openLogShot);
 $("impactGrid").addEventListener("click", (e) => onGridTap(e.clientX, e.clientY));
-$("markHit").addEventListener("click", () => { currentHit = true; updateHitButtons(); });
-$("markMiss").addEventListener("click", () => { currentHit = false; updateHitButtons(); });
 $("logReadTilt").addEventListener("click", () => readTilt("logAngle"));
-$("saveShotBtn").addEventListener("click", saveShot);
+$("toResultBtn").addEventListener("click", goLogResult);
 $("cancelShotBtn").addEventListener("click", () => showScreen("hud"));
+$("saveHitBtn").addEventListener("click", () => { currentHit = true; saveShot(); });
+$("saveMissBtn").addEventListener("click", () => { currentHit = false; saveShot(); });
+$("backToPlaceBtn").addEventListener("click", () => showLogStep("place"));
 
 
 /* =========================================================================
@@ -791,7 +784,7 @@ showScreen("setup");
 
 // Show which build is loaded — lets us confirm an update actually reached the
 // glasses (read it at the bottom of the Setup screen).
-const APP_VERSION = "v10";
+const APP_VERSION = "v11";
 $("buildTag").textContent = "RangeHUD " + APP_VERSION;
 $("appTitle").textContent = "RangeHUD " + APP_VERSION;  // version up top, easy to spot
 
@@ -876,37 +869,52 @@ function enableFormKeyNav() {
 }
 
 /* -------------------------------------------------------------------------
-   LOG SHOT GESTURES (glasses)
+   LOG SHOT GESTURES (glasses) — two steps, single pinch only
    -------------------------------------------------------------------------
-   No pointer on the glasses, so you can't tap the target. Instead:
-       swipe up/down/left/right -> nudge the impact dot (0.1 mil per swipe)
-       pinch (single)           -> save the shot
-       double-pinch             -> toggle Hit / Miss
-       pinch-back               -> cancel (back to HUD)
-   Tapping still works on a phone.
+   STEP "place":  swipe up/down/left/right -> nudge the dot (0.1 mil/swipe)
+                  pinch  -> go to the hit/miss step
+                  back   -> cancel (HUD)
+   STEP "result": swipe  -> highlight Save HIT / Save MISS / Re-place
+                  pinch  -> choose the highlighted one (native button press)
+                  back   -> return to placing
+   (No double-pinch anywhere — the OS eats it.)
    ------------------------------------------------------------------------- */
 function enableLogShotNav() {
   const STEP = 0.1;         // mils moved per swipe
-  let lsTimer = null;
   function visible() { return !$("logshot").classList.contains("hidden"); }
+  function placing() { return !$("logPlace").classList.contains("hidden"); }
+
+  function resultButtons() {
+    return [$("saveHitBtn"), $("saveMissBtn"), $("backToPlaceBtn")];
+  }
+  function moveResultFocus(delta) {
+    const els = resultButtons();
+    let i = els.indexOf(document.activeElement);
+    i = (i < 0) ? (delta > 0 ? 0 : els.length - 1) : (i + delta + els.length) % els.length;
+    els[i].focus();
+  }
 
   document.addEventListener("keydown", (e) => {
     if (!visible()) return;
-    switch (e.key) {
-      case "ArrowLeft":  e.preventDefault(); nudgeImpact(-STEP, 0); break;
-      case "ArrowRight": e.preventDefault(); nudgeImpact(STEP, 0); break;
-      case "ArrowUp":    e.preventDefault(); nudgeImpact(0, STEP); break;
-      case "ArrowDown":  e.preventDefault(); nudgeImpact(0, -STEP); break;
-      case "Enter":
-        e.preventDefault();
-        if (lsTimer) { clearTimeout(lsTimer); lsTimer = null; toggleHit(); } // double = Hit/Miss
-        else { lsTimer = setTimeout(() => { lsTimer = null; saveShot(); }, DOUBLE_MS); } // single = save
-        break;
-      case "Escape":
-        e.preventDefault();
-        showScreen("hud"); // cancel
-        break;
-      default: return;
+
+    if (placing()) {
+      switch (e.key) {
+        case "ArrowLeft":  e.preventDefault(); nudgeImpact(-STEP, 0); break;
+        case "ArrowRight": e.preventDefault(); nudgeImpact(STEP, 0); break;
+        case "ArrowUp":    e.preventDefault(); nudgeImpact(0, STEP); break;
+        case "ArrowDown":  e.preventDefault(); nudgeImpact(0, -STEP); break;
+        case "Enter":      e.preventDefault(); goLogResult(); break;       // -> result step
+        case "Escape":     e.preventDefault(); showScreen("hud"); break;   // cancel
+        default: return;
+      }
+    } else { // result step
+      switch (e.key) {
+        case "ArrowLeft": case "ArrowUp":    e.preventDefault(); moveResultFocus(-1); break;
+        case "ArrowRight": case "ArrowDown": e.preventDefault(); moveResultFocus(1); break;
+        case "Escape":     e.preventDefault(); showLogStep("place"); break; // re-place
+        // Enter is left to the browser: it presses the highlighted button.
+        default: return;
+      }
     }
   });
 }
