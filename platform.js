@@ -94,17 +94,17 @@ const Platform = {
      pinch (onSelect) presses it.
      ----------------------------------------------------------------------- */
   bindInputs: function (actions) {
-    function call(name) { if (actions[name]) actions[name](); }
+    function call(name, ev) { if (actions[name]) actions[name](ev); }
 
     // ---- Keyboard / Neural-Band swipes (arrows) + pinch (Enter) ----
     document.addEventListener("keydown", function (e) {
       switch (e.key) {
-        case "ArrowUp": call("onUp"); break;
-        case "ArrowDown": call("onDown"); break;
-        case "ArrowLeft": call("onLeft"); break;
-        case "ArrowRight": call("onRight"); break;
-        case "Enter": call("onSelect"); break;
-        case "Escape": call("onBack"); break;
+        case "ArrowUp": call("onUp", e); break;
+        case "ArrowDown": call("onDown", e); break;
+        case "ArrowLeft": call("onLeft", e); break;
+        case "ArrowRight": call("onRight", e); break;
+        case "Enter": call("onSelect", e); break;
+        case "Escape": call("onBack", e); break;
         default: return;
       }
     });

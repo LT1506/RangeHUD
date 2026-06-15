@@ -522,19 +522,37 @@ function moveHudFocus(delta) {
   els[i].focus();
 }
 
+// Single pinch vs double pinch. A double-pinch (two pinches within DOUBLE_MS)
+// jumps to Log Shot. To tell them apart we take over the Enter key on the HUD
+// and wait a beat: if a second pinch arrives we treat it as a double, otherwise
+// the single action runs. (Swappable for a native double-pinch event later.)
+const DOUBLE_MS = 300;
+let pinchTimer = null;
+
+function onHudPinch(e) {
+  if (!hudVisible()) return;          // forms keep native Enter (activates buttons)
+  if (e) e.preventDefault();          // we drive the action ourselves on the HUD
+
+  if (pinchTimer) {                   // this is the SECOND pinch -> double
+    clearTimeout(pinchTimer);
+    pinchTimer = null;
+    openLogShot();
+    return;
+  }
+  pinchTimer = setTimeout(() => {     // no second pinch -> single
+    pinchTimer = null;
+    const a = document.activeElement;
+    if (a && a.tagName === "BUTTON" && $("hud").contains(a)) a.click(); // press highlighted
+    else speakHud();                                                    // or read it aloud
+  }, DOUBLE_MS);
+}
+
 Platform.bindInputs({
   onUp:    () => { if (hudVisible()) stepDistance(25); },
   onDown:  () => { if (hudVisible()) stepDistance(-25); },
   onLeft:  () => { if (hudVisible()) moveHudFocus(-1); },
   onRight: () => { if (hudVisible()) moveHudFocus(1); },
-  onSelect: () => {
-    if (!hudVisible()) return;
-    const a = document.activeElement;
-    // If a HUD button is highlighted, let the native Enter press it. Otherwise
-    // pinch defaults to reading the solution aloud.
-    if (a && a.tagName === "BUTTON" && $("hud").contains(a)) return;
-    speakHud();
-  },
+  onSelect: onHudPinch,
   onBack:  () => { if (hudVisible()) hudToSetup(); }
 });
 
@@ -755,7 +773,7 @@ showScreen("setup");
 
 // Show which build is loaded — lets us confirm an update actually reached the
 // glasses (read it at the bottom of the Setup screen).
-const APP_VERSION = "v7";
+const APP_VERSION = "v8";
 $("buildTag").textContent = "RangeHUD " + APP_VERSION;
 $("appTitle").textContent = "RangeHUD " + APP_VERSION;  // version up top, easy to spot
 
