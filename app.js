@@ -309,6 +309,7 @@ async function fetchWeatherIntoForm() {
     $("pressure").value = w.pressureInHg.toFixed(2);
     $("altitude").value = Math.round(w.elevationFt);
     $("windSpeed").value = Math.round(w.windMph);
+    persistSession();
 
     btn.textContent = "✓ Updated";
   } catch (err) {
@@ -340,6 +341,7 @@ async function refreshWindOnly() {
     $("windSpeed").value = Math.round(w.windMph);
     $("temp").value = Math.round(w.tempF);
     $("pressure").value = w.pressureInHg.toFixed(2);
+    persistSession();
     if (!$("hud").classList.contains("hidden")) renderHud();
   } catch (e) {
     /* offline or denied — just keep the last values */
@@ -486,6 +488,8 @@ $("goHudBtn").addEventListener("click", () => {
 // HUD actions, defined once so taps, keys, and gestures all reuse them.
 function stepDistance(deltaYd) {
   hudDistanceYd = Math.max(0, Math.min(1200, hudDistanceYd + deltaYd));
+  $("targetDistance").value = hudDistanceYd;  // keep them in sync...
+  persistSession();                           // ...and remember it
   renderHud();
 }
 function speakHud() {
@@ -776,15 +780,43 @@ $("shotList").addEventListener("click", (e) => {
 
 
 /* -------------------------------------------------------------------------
+   SESSION PERSISTENCE
+   -------------------------------------------------------------------------
+   Save the condition fields + target distance so the app reopens where you
+   left off, instead of resetting to defaults every launch.
+   ------------------------------------------------------------------------- */
+const SESSION_FIELDS = ["windSpeed", "windClock", "temp", "pressure", "altitude", "incline", "targetDistance"];
+
+function persistSession() {
+  const session = {};
+  SESSION_FIELDS.forEach((id) => { session[id] = $(id).value; });
+  Storage.saveSession(session);
+}
+
+function restoreSession() {
+  const session = Storage.loadSession();
+  if (!session) return;
+  SESSION_FIELDS.forEach((id) => {
+    if (session[id] !== undefined && session[id] !== "") $(id).value = session[id];
+  });
+}
+
+// Any edit on the Setup screen is remembered. (Programmatic changes — weather,
+// auto-wind, distance stepping — call persistSession() directly, since a
+// scripted value change doesn't fire a "change" event.)
+$("setup").addEventListener("change", persistSession);
+
+/* -------------------------------------------------------------------------
    STARTUP
-   Fill the dropdown and show the setup screen.
+   Fill the dropdown, restore the last session, show the setup screen.
    ------------------------------------------------------------------------- */
 refreshProfileSelect();
+restoreSession();
 showScreen("setup");
 
 // Show which build is loaded — lets us confirm an update actually reached the
 // glasses (read it at the bottom of the Setup screen).
-const APP_VERSION = "v11";
+const APP_VERSION = "v12";
 $("buildTag").textContent = "RangeHUD " + APP_VERSION;
 $("appTitle").textContent = "RangeHUD " + APP_VERSION;  // version up top, easy to spot
 

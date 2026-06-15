@@ -11,7 +11,7 @@
    ========================================================================= */
 
 // Bump this whenever the cached file list changes.
-const CACHE_NAME = "rangehud-v11";
+const CACHE_NAME = "rangehud-v12";
 
 // The "app shell": everything needed to run RangeHUD offline.
 const ASSETS = [

@@ -56,10 +56,26 @@ function setActiveId(id) {
   localStorage.setItem(ACTIVE_KEY, id);
 }
 
+// The "session" = your last-used conditions and distance, so the app reopens
+// exactly where you left off (re-entering them on the glasses is slow).
+const SESSION_KEY = "rangehud.session";
+
+function loadSession() {
+  const text = localStorage.getItem(SESSION_KEY);
+  if (!text) return null;
+  try { return JSON.parse(text); } catch (e) { return null; }
+}
+
+function saveSession(session) {
+  localStorage.setItem(SESSION_KEY, JSON.stringify(session));
+}
+
 // The public API for this file.
 const Storage = {
   loadProfiles: loadProfiles,
   saveProfiles: saveProfiles,
   getActiveId: getActiveId,
-  setActiveId: setActiveId
+  setActiveId: setActiveId,
+  loadSession: loadSession,
+  saveSession: saveSession
 };
