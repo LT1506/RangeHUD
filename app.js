@@ -586,12 +586,12 @@ function openLogShot() {
   const hold = Ballistics.solve(profile, conditions).holdAt(hudDistanceYd);
   logContext = { profile: profile, conditions: conditions, distanceYd: hudDistanceYd, hold: hold };
 
-  // Reset the form.
-  impactOffset = null;
+  // Reset the form. The marker starts at dead center (point of aim); you then
+  // either tap (phone) or swipe (glasses) to move it to the real impact.
+  impactOffset = { wind: 0, elev: 0 };
   currentHit = true;
   updateHitButtons();
-  $("impactDot").style.display = "none";
-  $("impactReadout").textContent = "No impact set";
+  renderImpact();
   $("logAngle").value = conditions.inclineDeg || 0;
 
   $("logContext").textContent = hudDistanceYd + " yd · " + profile.name;
@@ -602,32 +602,52 @@ function openLogShot() {
   showScreen("logshot");
 }
 
-// Convert a tap on the SVG target into a mil offset and show it.
-function onGridTap(clientX, clientY) {
-  const grid = $("impactGrid");
-  const rect = grid.getBoundingClientRect();
-  const fx = (clientX - rect.left) / rect.width;   // 0..1 left→right
-  const fy = (clientY - rect.top) / rect.height;   // 0..1 top→bottom
-  const windMil = clamp(-3 + fx * 6, -3, 3);       // viewBox spans -3..3 mils
-  const elevMil = clamp(-(-3 + fy * 6), -3, 3);    // invert: up is positive
-  impactOffset = { wind: windMil, elev: elevMil };
-
+// Draw the impact marker at the current offset and update the readout.
+function renderImpact() {
+  if (!impactOffset) return;
+  const w = impactOffset.wind, e = impactOffset.elev;
   const dot = $("impactDot");
-  dot.setAttribute("cx", windMil);
-  dot.setAttribute("cy", -elevMil);  // screen y is inverted again for drawing
+  dot.setAttribute("cx", w);
+  dot.setAttribute("cy", -e);        // screen y is inverted for drawing
   dot.style.display = "";
 
   const dist = logContext ? logContext.distanceYd : 100;
   const inPerMil = 0.036 * dist;     // 1 mil ≈ 3.6 in at 100 yd
   $("impactReadout").textContent =
-    Math.abs(windMil).toFixed(1) + " mil " + (windMil >= 0 ? "R" : "L") + ", " +
-    Math.abs(elevMil).toFixed(1) + " mil " + (elevMil >= 0 ? "high" : "low") +
-    "  (" + Math.abs(windMil * inPerMil).toFixed(1) + "\" / " +
-    Math.abs(elevMil * inPerMil).toFixed(1) + "\" @ " + dist + " yd)";
+    Math.abs(w).toFixed(1) + " mil " + (w >= 0 ? "R" : "L") + ", " +
+    Math.abs(e).toFixed(1) + " mil " + (e >= 0 ? "high" : "low") +
+    "  (" + Math.abs(w * inPerMil).toFixed(1) + "\" / " +
+    Math.abs(e * inPerMil).toFixed(1) + "\" @ " + dist + " yd)";
+}
+
+// Phone: tap the SVG target to place the marker.
+function onGridTap(clientX, clientY) {
+  const grid = $("impactGrid");
+  const rect = grid.getBoundingClientRect();
+  const fx = (clientX - rect.left) / rect.width;   // 0..1 left→right
+  const fy = (clientY - rect.top) / rect.height;   // 0..1 top→bottom
+  impactOffset = {
+    wind: clamp(-3 + fx * 6, -3, 3),               // viewBox spans -3..3 mils
+    elev: clamp(-(-3 + fy * 6), -3, 3)             // invert: up is positive
+  };
+  renderImpact();
+}
+
+// Glasses: nudge the marker with swipes.
+function nudgeImpact(dWind, dElev) {
+  if (!impactOffset) impactOffset = { wind: 0, elev: 0 };
+  impactOffset.wind = clamp(impactOffset.wind + dWind, -3, 3);
+  impactOffset.elev = clamp(impactOffset.elev + dElev, -3, 3);
+  renderImpact();
+}
+
+function toggleHit() {
+  currentHit = !currentHit;
+  updateHitButtons();
 }
 
 function saveShot() {
-  if (!impactOffset) { alert("Tap where the shot hit first."); return; }
+  if (!impactOffset || !logContext) return;
   const c = logContext;
   Shots.addShot({
     id: "s" + Date.now(),
@@ -771,7 +791,7 @@ showScreen("setup");
 
 // Show which build is loaded — lets us confirm an update actually reached the
 // glasses (read it at the bottom of the Setup screen).
-const APP_VERSION = "v9";
+const APP_VERSION = "v10";
 $("buildTag").textContent = "RangeHUD " + APP_VERSION;
 $("appTitle").textContent = "RangeHUD " + APP_VERSION;  // version up top, easy to spot
 
@@ -781,6 +801,7 @@ $("appTitle").textContent = "RangeHUD " + APP_VERSION;  // version up top, easy 
 // its value. It's inert with touch/mouse and only touches the keys/scroll that
 // would otherwise trap you. The cosmetic lens-sizing still waits for ?glasses=1.
 enableFormKeyNav();
+enableLogShotNav();
 if (Platform.isGlasses()) {
   document.body.classList.add("glasses");
 }
@@ -824,9 +845,15 @@ function enableFormKeyNav() {
                   (el.tagName === "INPUT" && el.type === "number"));
   }
 
+  function otherScreenHandles() {
+    // The HUD and the Log Shot screen drive their own swipes.
+    return !$("hud").classList.contains("hidden") ||
+           !$("logshot").classList.contains("hidden");
+  }
+
   // ---- If swipes arrive as ARROW KEYS ----
   document.addEventListener("keydown", (e) => {
-    if (!$("hud").classList.contains("hidden")) return; // HUD handles its own
+    if (otherScreenHandles()) return;
     const el = document.activeElement;
     if (e.key === "ArrowRight") { e.preventDefault(); moveFocus(1); }
     else if (e.key === "ArrowLeft") { e.preventDefault(); moveFocus(-1); }
@@ -840,12 +867,48 @@ function enableFormKeyNav() {
   // A focused number field changes its value on wheel; intercept that so a
   // swipe moves between fields instead of being trapped.
   document.addEventListener("wheel", (e) => {
-    if (!$("hud").classList.contains("hidden")) return;
+    if (otherScreenHandles()) return;
     if (isValueField(document.activeElement)) {
       e.preventDefault();
       moveFocus(e.deltaY > 0 ? 1 : -1);
     }
   }, { passive: false });
+}
+
+/* -------------------------------------------------------------------------
+   LOG SHOT GESTURES (glasses)
+   -------------------------------------------------------------------------
+   No pointer on the glasses, so you can't tap the target. Instead:
+       swipe up/down/left/right -> nudge the impact dot (0.1 mil per swipe)
+       pinch (single)           -> save the shot
+       double-pinch             -> toggle Hit / Miss
+       pinch-back               -> cancel (back to HUD)
+   Tapping still works on a phone.
+   ------------------------------------------------------------------------- */
+function enableLogShotNav() {
+  const STEP = 0.1;         // mils moved per swipe
+  let lsTimer = null;
+  function visible() { return !$("logshot").classList.contains("hidden"); }
+
+  document.addEventListener("keydown", (e) => {
+    if (!visible()) return;
+    switch (e.key) {
+      case "ArrowLeft":  e.preventDefault(); nudgeImpact(-STEP, 0); break;
+      case "ArrowRight": e.preventDefault(); nudgeImpact(STEP, 0); break;
+      case "ArrowUp":    e.preventDefault(); nudgeImpact(0, STEP); break;
+      case "ArrowDown":  e.preventDefault(); nudgeImpact(0, -STEP); break;
+      case "Enter":
+        e.preventDefault();
+        if (lsTimer) { clearTimeout(lsTimer); lsTimer = null; toggleHit(); } // double = Hit/Miss
+        else { lsTimer = setTimeout(() => { lsTimer = null; saveShot(); }, DOUBLE_MS); } // single = save
+        break;
+      case "Escape":
+        e.preventDefault();
+        showScreen("hud"); // cancel
+        break;
+      default: return;
+    }
+  });
 }
 
 /* -------------------------------------------------------------------------
