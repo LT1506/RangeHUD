@@ -501,13 +501,41 @@ $("minus25").addEventListener("click", () => stepDistance(-25));
 $("hudSpeak").addEventListener("click", speakHud);
 $("hudBack").addEventListener("click", hudToSetup);
 
-// Route keyboard / swipe / (future) Neural Band input to those same actions.
-// This only matters while the HUD is visible.
+// Route swipes/keys to the HUD. The model that fits the Neural Band:
+//   up/down    -> distance +/- 25
+//   left/right -> move the highlight across the action buttons
+//   pinch      -> press the highlighted button (native), or Speak if none
+//   pinch-back -> Setup
+function hudVisible() { return !$("hud").classList.contains("hidden"); }
+
+// The action buttons you can land on (Speak / Auto-wind / Log shot / Setup).
+function hudButtons() {
+  return Array.prototype.slice
+    .call($("hud").querySelectorAll(".button-row button"))
+    .filter((el) => el.offsetParent !== null);
+}
+function moveHudFocus(delta) {
+  const els = hudButtons();
+  if (els.length === 0) return;
+  let i = els.indexOf(document.activeElement);
+  i = (i < 0) ? (delta > 0 ? 0 : els.length - 1) : (i + delta + els.length) % els.length;
+  els[i].focus();
+}
+
 Platform.bindInputs({
-  onNext: () => { if (!$("hud").classList.contains("hidden")) stepDistance(25); },
-  onPrev: () => { if (!$("hud").classList.contains("hidden")) stepDistance(-25); },
-  onSelect: () => { if (!$("hud").classList.contains("hidden")) speakHud(); },
-  onBack: () => { if (!$("hud").classList.contains("hidden")) hudToSetup(); }
+  onUp:    () => { if (hudVisible()) stepDistance(25); },
+  onDown:  () => { if (hudVisible()) stepDistance(-25); },
+  onLeft:  () => { if (hudVisible()) moveHudFocus(-1); },
+  onRight: () => { if (hudVisible()) moveHudFocus(1); },
+  onSelect: () => {
+    if (!hudVisible()) return;
+    const a = document.activeElement;
+    // If a HUD button is highlighted, let the native Enter press it. Otherwise
+    // pinch defaults to reading the solution aloud.
+    if (a && a.tagName === "BUTTON" && $("hud").contains(a)) return;
+    speakHud();
+  },
+  onBack:  () => { if (hudVisible()) hudToSetup(); }
 });
 
 // DOPE table
@@ -727,7 +755,7 @@ showScreen("setup");
 
 // Show which build is loaded — lets us confirm an update actually reached the
 // glasses (read it at the bottom of the Setup screen).
-const APP_VERSION = "v6";
+const APP_VERSION = "v7";
 $("buildTag").textContent = "RangeHUD " + APP_VERSION;
 $("appTitle").textContent = "RangeHUD " + APP_VERSION;  // version up top, easy to spot
 

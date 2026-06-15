@@ -81,24 +81,32 @@ const Platform = {
   },
 
   /* -----------------------------------------------------------------------
-     4. INPUT: one set of intents, many input sources
+     4. INPUT: directional intents, many input sources
      -----------------------------------------------------------------------
-     The HUD only cares about four INTENTS: next (more distance), prev (less),
-     select (read it out), and back. This function maps real-world inputs to
-     those intents in ONE place:
-       - keyboard arrows / Enter / Escape  (works in any browser, great for testing)
-       - touch swipes                       (phones)
-       - Neural Band swipes/pinches         (glasses — wired in when documented)
+     The Neural Band's vocabulary is: swipe up/down/left/right + pinch (select)
+     + pinch-back. Meta delivers swipes as ARROW KEYS and pinch as ENTER, so we
+     map those (and touch swipes, for phone testing) to one set of callbacks and
+     let each screen decide what a direction means:
 
-     Pass an object of callbacks: { onNext, onPrev, onSelect, onBack }.
+       { onUp, onDown, onLeft, onRight, onSelect, onBack }
+
+     e.g. the HUD uses up/down for distance and left/right to pick a button;
+     pinch (onSelect) presses it.
      ----------------------------------------------------------------------- */
   bindInputs: function (actions) {
-    // ---- Keyboard (test on a laptop with arrow keys) ----
+    function call(name) { if (actions[name]) actions[name](); }
+
+    // ---- Keyboard / Neural-Band swipes (arrows) + pinch (Enter) ----
     document.addEventListener("keydown", function (e) {
-      if (e.key === "ArrowUp" || e.key === "ArrowRight") actions.onNext();
-      else if (e.key === "ArrowDown" || e.key === "ArrowLeft") actions.onPrev();
-      else if (e.key === "Enter") actions.onSelect();
-      else if (e.key === "Escape") actions.onBack();
+      switch (e.key) {
+        case "ArrowUp": call("onUp"); break;
+        case "ArrowDown": call("onDown"); break;
+        case "ArrowLeft": call("onLeft"); break;
+        case "ArrowRight": call("onRight"); break;
+        case "Enter": call("onSelect"); break;
+        case "Escape": call("onBack"); break;
+        default: return;
+      }
     });
 
     // ---- Touch swipes (phones) ----
@@ -111,21 +119,8 @@ const Platform = {
       const dx = e.changedTouches[0].clientX - startX;
       const dy = e.changedTouches[0].clientY - startY;
       if (Math.abs(dx) < 30 && Math.abs(dy) < 30) return; // too small = a tap
-      if (Math.abs(dx) > Math.abs(dy)) {
-        (dx > 0 ? actions.onNext : actions.onPrev)(); // swipe right = next
-      } else {
-        (dy > 0 ? actions.onBack : actions.onSelect)(); // swipe down = back
-      }
+      if (Math.abs(dx) > Math.abs(dy)) call(dx > 0 ? "onRight" : "onLeft");
+      else call(dy > 0 ? "onDown" : "onUp");
     });
-
-    // ---- Neural Band (glasses) -----------------------------------------
-    // Meta's web-app path exposes Neural Band swipes/pinches as input, but the
-    // exact JavaScript event API isn't documented in the preview yet. When it
-    // is, attach it RIGHT HERE and route to the same four callbacks — nothing
-    // else in the app needs to change. The likely mapping:
-    //     swipe forward/back -> onNext / onPrev
-    //     pinch              -> onSelect
-    //     swipe down / long  -> onBack
-    // (Placeholder left intentionally so the wiring point is obvious.)
   }
 };

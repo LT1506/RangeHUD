@@ -218,8 +218,9 @@ body.glasses .hud-big { font-size: 2.6rem; }       /* still the biggest thing */
 body.glasses .hud-distance { font-size: 1.9rem; }
 body.glasses .hud-sub { font-size: 0.85rem; }
 body.glasses .step-btn { width: 44px; height: 44px; font-size: 1rem; }
-/* On the real glasses, swipes/voice replace these — hide to mimic that. */
-body.glasses #hud .button-row { display: none; }
+/* Keep the action buttons small on the lens, but visible — swipe left/right
+   reaches them and pinch presses them. */
+body.glasses #hud .button-row button { padding: 6px 8px; font-size: 0.8rem; }
 
 
 /* =========================================================================
