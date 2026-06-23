@@ -29,6 +29,10 @@
         <button id="editProfileBtn">Edit</button>
         <button id="deleteProfileBtn" class="danger">Delete</button>
       </div>
+      <!-- Pick a common cartridge to pre-fill a New Profile form (read-only
+           library — choosing one doesn't save anything by itself). -->
+      <label for="librarySelect">Add from library</label>
+      <select id="librarySelect"></select>
     </div>
 
     <!-- ---- Profile editor form (hidden until New/Edit is pressed) ---- -->
@@ -292,6 +296,7 @@
   <script src="storage.js"></script>
   <script src="shots.js"></script>
   <script src="platform.js"></script>
+  <script src="presets.js"></script>
   <script src="app.js"></script>
 </body>
 </html>

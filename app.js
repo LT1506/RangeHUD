@@ -94,6 +94,31 @@ function refreshProfileSelect() {
 }
 
 /* -------------------------------------------------------------------------
+   CARTRIDGE LIBRARY DROPDOWN
+   Fill the "Add from library" <select> from the read-only PRESETS list. We
+   store each option's value as its INDEX into PRESETS, so the change handler
+   can look the chosen preset straight back up.
+   ------------------------------------------------------------------------- */
+function fillLibrarySelect() {
+  const select = $("librarySelect");
+  select.innerHTML = ""; // clear out the old options
+
+  // A placeholder first row so the dropdown starts on a non-cartridge choice.
+  const placeholder = document.createElement("option");
+  placeholder.value = "";
+  placeholder.textContent = "Add from library…";
+  placeholder.selected = true;
+  select.appendChild(placeholder);
+
+  PRESETS.forEach((preset, index) => {
+    const option = document.createElement("option");
+    option.value = index;
+    option.textContent = preset.name;
+    select.appendChild(option);
+  });
+}
+
+/* -------------------------------------------------------------------------
    THE PROFILE EDITOR FORM
    ------------------------------------------------------------------------- */
 
@@ -466,6 +491,30 @@ $("profileSelect").addEventListener("change", (e) => {
   activeId = e.target.value;
   Storage.setActiveId(activeId);
 });
+// Cartridge library: picking one opens a blank New Profile form, then fills it
+// in. We open the form with openProfileForm(null) FIRST so editingId is null and
+// the title says "New Profile" — then overwrite the fields with the preset's
+// values. (Passing the preset straight into openProfileForm would treat it like
+// an existing profile being edited, which we don't want.)
+$("librarySelect").addEventListener("change", (e) => {
+  const idx = e.target.value;
+  if (idx === "") return;                 // the placeholder row — nothing to do
+  const preset = PRESETS[Number(idx)];
+
+  openProfileForm(null);                   // blank New Profile form first...
+  $("pfName").value = preset.name;         // ...then fill it from the preset
+  $("pfCaliber").value = preset.caliber;
+  $("pfWeight").value = preset.bulletWeightGr;
+  $("pfDragModel").value = preset.dragModel;
+  $("pfBc").value = preset.bc;
+  $("pfMv").value = preset.muzzleVelocityFps;
+  $("pfZero").value = preset.zeroDistanceYd;
+  $("pfSight").value = preset.sightHeightIn;
+
+  // Reset to the placeholder so the SAME cartridge can be picked again — a
+  // <select> only fires "change" when its value actually changes.
+  e.target.value = "";
+});
 $("newProfileBtn").addEventListener("click", () => openProfileForm(null));
 $("editProfileBtn").addEventListener("click", () => openProfileForm(getActiveProfile()));
 $("deleteProfileBtn").addEventListener("click", deleteActiveProfile);
@@ -811,12 +860,13 @@ $("setup").addEventListener("change", persistSession);
    Fill the dropdown, restore the last session, show the setup screen.
    ------------------------------------------------------------------------- */
 refreshProfileSelect();
+fillLibrarySelect();
 restoreSession();
 showScreen("setup");
 
 // Show which build is loaded — lets us confirm an update actually reached the
 // glasses (read it at the bottom of the Setup screen).
-const APP_VERSION = "v12";
+const APP_VERSION = "v13";
 $("buildTag").textContent = "RangeHUD " + APP_VERSION;
 $("appTitle").textContent = "RangeHUD " + APP_VERSION;  // version up top, easy to spot
 
