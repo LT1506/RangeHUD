@@ -229,6 +229,18 @@ function solve(profile, env) {
   const launchAngle = findLaunchAngle(profile, env);
   const samples = trace(profile, env, launchAngle, maxRangeFt);
 
+  // Speed of sound for THIS temperature (the same one trace() uses for drag),
+  // so the Mach numbers we report match the physics the solver actually ran.
+  const sos = speedOfSound(env.tempF);
+
+  // Bullet mass in "slugs" (the imperial unit of mass that pairs with ft & lbf).
+  //   1 pound-MASS  = 7000 grains
+  //   1 slug        = 32.174 pound-mass  (because weight = mass * g, g = 32.174)
+  // so:  massSlugs = grains / 7000 / 32.174
+  // Kinetic energy (ft-lbf) = 0.5 * massSlugs * velocity^2.
+  // Sanity check: 140 gr at 2750 fps  ->  ~2351 ft-lbf.
+  const massSlugs = (profile.bulletWeightGr || 0) / 7000 / GRAVITY;
+
   // Crosswind component in ft/s. The app passes crosswindMph (the part of the
   // wind blowing straight across the shot); we fall back to windSpeedMph for
   // any caller that still treats wind as full value.
@@ -266,7 +278,11 @@ function solve(profile, env) {
       driftMOA: driftAngleRad * RAD_TO_MOA,
       driftMil: driftAngleRad * RAD_TO_MIL,
       velocityFps: s.velocityFps,
-      timeS: s.timeS
+      timeS: s.timeS,
+      // NEW (additive — does not touch any drop/drift/velocity math above):
+      // retained kinetic energy and how fast we're going relative to sound.
+      energyFtLb: 0.5 * massSlugs * s.velocityFps * s.velocityFps,
+      mach: s.velocityFps / sos
     };
   });
 
@@ -288,7 +304,9 @@ function solve(profile, env) {
           driftMOA: blend("driftMOA"),
           driftMil: blend("driftMil"),
           velocityFps: blend("velocityFps"),
-          timeS: blend("timeS")
+          timeS: blend("timeS"),
+          energyFtLb: blend("energyFtLb"),
+          mach: blend("mach")
         };
       }
     }
@@ -300,6 +318,31 @@ function solve(profile, env) {
 
 
 /* -------------------------------------------------------------------------
+   5b. TRANSONIC / SUBSONIC RANGES (additive helper)
+   -------------------------------------------------------------------------
+   A bullet flies cleanly while it stays comfortably supersonic. As it slows
+   toward the speed of sound it enters the "transonic" zone (roughly Mach 1.2
+   down to Mach 1.0), where the airflow gets messy and accuracy can fall apart;
+   below Mach 1.0 it's "subsonic". Knowing WHERE those thresholds happen tells
+   you the practical max range of a load.
+
+   Given the rows[] from solve() (each carrying a `mach` value), return the
+   first range that drops below Mach 1.2 and the first below Mach 1.0. Either
+   is null if the table never crosses that threshold (still supersonic at the
+   end of the table).
+   ------------------------------------------------------------------------- */
+function transonicRanges(rows) {
+  let transonicYd = null; // first range under Mach 1.2
+  let subsonicYd = null;  // first range under Mach 1.0
+  for (let i = 0; i < rows.length; i++) {
+    if (transonicYd === null && rows[i].mach < 1.2) transonicYd = rows[i].rangeYd;
+    if (subsonicYd === null && rows[i].mach < 1.0) subsonicYd = rows[i].rangeYd;
+  }
+  return { transonicYd: transonicYd, subsonicYd: subsonicYd };
+}
+
+
+/* -------------------------------------------------------------------------
    6. THE PUBLIC API
    -------------------------------------------------------------------------
    Everything above is private to this file. We only hand the outside world
@@ -307,7 +350,8 @@ function solve(profile, env) {
    ------------------------------------------------------------------------- */
 const Ballistics = {
   solve: solve,
-  pressureForAltitude: pressureForAltitude
+  pressureForAltitude: pressureForAltitude,
+  transonicRanges: transonicRanges
 };
 
 // When run under Node.js (e.g. our test file), hand the object to `require`.

@@ -90,6 +90,67 @@ const cold = Ballistics.solve(SIX5, conditions(0, 12, 0, 10, 29.92)).holdAt(1000
 const hot = Ballistics.solve(SIX5, conditions(0, 12, 0, 100, 29.92)).holdAt(1000).dropMil;
 check("colder air drops more than hot air", cold > hot);
 
+// ---- NEW: kinetic energy, Mach, and transonic ranges ----------------------
+// These cover the additive ballistics keys (energyFtLb, mach) and the new
+// Ballistics.transonicRanges() helper. The seed SIX5 fixture above carries no
+// bullet weight, so we add it here (140 gr, matching the 6.5 CM preset/seed)
+// only for the energy math — drop/drift/velocity are weight-independent.
+const SIX5_140 = Object.assign({}, SIX5, { bulletWeightGr: 140 });
+const ke = Ballistics.solve(SIX5_140, conditions(0, 12, 0));
+
+// 8. Muzzle kinetic energy. row[0] sits at ~0.5 yd (a hair of drag already
+// shed), so it lands just under the textbook muzzle figure of ~2351 ft-lb.
+near("muzzle energy ~2351 ft-lb", ke.rows[0].energyFtLb, 2351, 5);
+
+// Verify the grains->slugs->KE formula independently of ballistics.js:
+//   massSlugs = grains / 7000 / 32.174 ; KE = 0.5 * mass * v^2
+const massSlugsIndependent = 140 / 7000 / 32.174;
+const keMuzzleIndependent = 0.5 * massSlugsIndependent * 2750 * 2750;
+near("independent KE formula (140gr @ 2750) ~2350.5", keMuzzleIndependent, 2350.5, 0.5);
+// And the row[0] energy should equal that formula evaluated at row[0]'s speed.
+const e0Expected = 0.5 * massSlugsIndependent * ke.rows[0].velocityFps * ke.rows[0].velocityFps;
+near("energyFtLb matches 0.5*m*v^2 at row[0]", ke.rows[0].energyFtLb, e0Expected, 0.001);
+
+// 9. Energy decreases monotonically with range and stays positive.
+const eMuzzle = ke.rows[0].energyFtLb;
+const e500 = ke.holdAt(500).energyFtLb;
+check("energy at 500 yd < muzzle energy", e500 < eMuzzle);
+check("energy at 500 yd > 0", e500 > 0);
+
+// 10. Mach key present and plausible. At the muzzle, mach ~ v / speedOfSound.
+const sos59 = 49.0223 * Math.sqrt(59 + 459.67); // speedOfSound(59 F)
+const machMuzzleExpected = ke.rows[0].velocityFps / sos59;
+near("muzzle mach ~ v/speedOfSound", ke.rows[0].mach, machMuzzleExpected, 0.005);
+near("muzzle mach ~ 2750/sos", ke.rows[0].mach, 2750 / sos59, 0.02);
+check("mach decreases with range", ke.holdAt(500).mach < ke.rows[0].mach);
+
+// 11. transonicRanges() for the seed 6.5 CM load: stays supersonic in-table,
+// so subsonicYd is null within 1000 yd and transonicYd (if any) is > 1000.
+const tr65 = Ballistics.transonicRanges(ke.rows);
+check("6.5 CM: subsonicYd null within 1000 yd",
+      tr65.subsonicYd === null || tr65.subsonicYd > 1000);
+check("6.5 CM: transonicYd null or > 1000 yd",
+      tr65.transonicYd === null || tr65.transonicYd > 1000);
+
+// 12. transonicRanges() for a load that DOES go subsonic in-table:
+// .308 Win 175gr @ 2600, G7 0.243. Expect transonic ~750-850, subsonic ~950-1000.
+const W308 = {
+  name: ".308 Win", bc: 0.243, dragModel: "G7", bulletWeightGr: 175,
+  muzzleVelocityFps: 2600, zeroDistanceYd: 100, sightHeightIn: 1.5
+};
+const tr308 = Ballistics.transonicRanges(Ballistics.solve(W308, conditions(0, 12, 0)).rows);
+check(".308: transonicYd is a number", typeof tr308.transonicYd === "number");
+check(".308: subsonicYd is a number", typeof tr308.subsonicYd === "number");
+near(".308: transonic crossing ~800 yd", tr308.transonicYd, 800, 60);
+near(".308: subsonic crossing ~975 yd", tr308.subsonicYd, 975, 40);
+check(".308: transonicYd < subsonicYd", tr308.transonicYd < tr308.subsonicYd);
+
+// 13. Existing-output guard: prove the additive change did NOT move the
+// trajectory. These dropMil values were captured from the current solver
+// output BEFORE relying on them; if they drift, the additive edit broke math.
+near("UNCHANGED: dropMil at 500 yd", std.holdAt(500).dropMil, 2.910549, 0.0005);
+near("UNCHANGED: dropMil at 1000 yd", std.holdAt(1000).dropMil, 8.911066, 0.0005);
+
 // ---- Shot-log analytics ---------------------------------------------------
 const Shots = require("./shots.js");
 

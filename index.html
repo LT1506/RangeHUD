@@ -166,16 +166,24 @@
     </div>
     <div class="hud-tip">swipe &uarr; / &darr; to range</div>
 
-    <div class="hud-hold">
+    <div class="hud-hold hud-hold--elev">
       <div class="hud-label">ELEVATION</div>
       <div class="hud-big"><span id="hudElevMil">0.0</span><span class="unit">mil</span></div>
       <div class="hud-sub"><span id="hudElevMOA">0.0</span> MOA</div>
     </div>
 
-    <div class="hud-hold">
+    <div class="hud-hold hud-hold--wind">
       <div class="hud-label">WIND HOLD</div>
       <div class="hud-big"><span id="hudWindMil">0.0</span><span class="unit">mil</span></div>
       <div class="hud-sub"><span id="hudWindMOA">0.0</span> MOA</div>
+    </div>
+
+    <!-- Tertiary readout: small/secondary so it never competes with the holds.
+         Time of flight, retained velocity, and energy at the current distance. -->
+    <div id="hudExtras" class="hud-extras">
+      <span><span id="hudTof">0.0</span>s</span>
+      <span><span id="hudVel">0</span> fps</span>
+      <span><span id="hudEnergy">0</span> ft-lb</span>
     </div>
 
     <div class="button-row">
@@ -272,6 +280,7 @@
   <section id="dope" class="screen hidden">
     <h1 id="dopeProfile">DOPE</h1>
     <p class="hint">Uses the current conditions you set on the Setup screen.</p>
+    <p id="dopeRange" class="hint"></p>
     <div class="table-wrap">
       <table id="dopeTable">
         <thead>
@@ -280,12 +289,19 @@
             <th>Drop MIL</th>
             <th>Drop MOA</th>
             <th>Wind MIL</th>
+            <th>Wind MOA</th>
+            <th>ToF s</th>
             <th>Vel fps</th>
+            <th>Energy</th>
           </tr>
         </thead>
         <tbody id="dopeBody"></tbody>
       </table>
     </div>
+    <p class="hint">
+      <span class="dope-key transonic">&#9632;</span> transonic (~Mach 1.2)
+      &nbsp; <span class="dope-key subsonic">&#9632;</span> subsonic (~Mach 1.0) &mdash; accuracy degrades.
+    </p>
     <button id="dopeBack" class="ghost">&larr; Setup</button>
   </section>
 

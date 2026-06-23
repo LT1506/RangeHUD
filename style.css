@@ -165,8 +165,32 @@ button:active { transform: translateY(1px); } /* tiny press feedback */
 .hud-big .unit { font-size: 1.4rem; color: var(--muted); margin-left: 6px; }
 .hud-sub { font-size: 1.1rem; color: var(--muted); margin-top: 2px; }
 
-/* Tint the wind hold differently so the two never get confused at a glance. */
-#hud .hud-hold:nth-of-type(3) .hud-big { color: var(--accent-2); }
+/* VISUAL HIERARCHY (glasses-first):
+   ELEVATION is the primary hold — make it dominate. It's the first number the
+   eye should land on in the lens, so it's the biggest and brightest. */
+#hud .hud-hold--elev .hud-label { color: var(--accent); }
+#hud .hud-hold--elev .hud-big {
+  font-size: 5.4rem;        /* clearly larger than the wind hold below it */
+  line-height: 1;
+  text-shadow: 0 0 18px rgba(255, 204, 51, 0.25); /* extra "pop" / contrast */
+}
+/* WIND is secondary: present, but a step down from elevation. */
+#hud .hud-hold--wind .hud-big {
+  font-size: 3.4rem;
+  color: var(--accent-2);   /* different tint so the two never get confused */
+}
+
+/* TERTIARY readout: time of flight, retained velocity, energy. Small and muted
+   so it informs without competing with the holds above it. */
+.hud-extras {
+  display: flex;
+  justify-content: center;
+  gap: 16px;
+  font-size: 0.9rem;
+  color: var(--muted);
+  letter-spacing: 0.03em;
+}
+.hud-extras span span { color: var(--text); font-weight: 600; }
 
 #hudBack { margin-top: 10px; }
 
@@ -190,6 +214,17 @@ th {
 }
 td:first-child, th:first-child { text-align: left; font-weight: 600; }
 tbody tr:nth-child(even) { background: #191e25; } /* zebra stripes = easier to read */
+
+/* Shade the ranges where the bullet slows past Mach 1.2 (transonic) and Mach
+   1.0 (subsonic) — that's where accuracy starts to fall off. The row colors win
+   over the zebra striping so the warning is always visible. */
+tbody tr.transonic, tbody tr.transonic:nth-child(even) { background: #3a2e12; }
+tbody tr.subsonic,  tbody tr.subsonic:nth-child(even)  { background: #3a1a1a; }
+
+/* Little colored squares in the caption legend, matching the row shades. */
+.dope-key { font-size: 1rem; vertical-align: middle; }
+.dope-key.transonic { color: #d2a23a; }
+.dope-key.subsonic  { color: #d25a5a; }
 
 
 /* =========================================================================
@@ -221,9 +256,12 @@ body.glasses #hud {
   border-radius: 18px;
   box-shadow: 0 0 60px rgba(255, 204, 51, 0.05);
 }
-body.glasses .hud-big { font-size: 2.6rem; }       /* still the biggest thing */
+body.glasses .hud-big { font-size: 2.6rem; }       /* wind hold size */
+body.glasses #hud .hud-hold--elev .hud-big { font-size: 3.4rem; } /* elevation stays dominant */
+body.glasses #hud .hud-hold--wind .hud-big { font-size: 2.2rem; } /* wind a step down */
 body.glasses .hud-distance { font-size: 1.9rem; }
 body.glasses .hud-sub { font-size: 0.85rem; }
+body.glasses .hud-extras { font-size: 0.75rem; gap: 10px; } /* tertiary, stays small */
 body.glasses .step-btn { width: 44px; height: 44px; font-size: 1rem; }
 /* Keep the action buttons small on the lens, but visible — swipe left/right
    reaches them and pinch presses them. */

@@ -48,18 +48,34 @@ const Platform = {
     const noWind = windMil < 0.05;
     const side = ctx.windSide; // "L", "R", or "—"
 
-    // A tiny one-liner, e.g. "600yd  UP 6.2  L 0.8"
+    // Secondary numbers: how long the bullet is in the air, how fast it's still
+    // going, and how much punch it's carrying when it arrives. These are pulled
+    // straight from the solved hold (added by ballistics.js) and rounded only
+    // for display, never for the math.
+    const tofS = ctx.hold.timeS;
+    const velFps = Math.round(ctx.hold.velocityFps);
+    const energyFtLb = Math.round(ctx.hold.energyFtLb);
+
+    // A tiny one-liner, e.g. "600yd  UP 6.2  L 0.8  ·  1.2s 1900fps 1120ftlb"
     const windPart = noWind ? "no wind" : (side + " " + windMil.toFixed(1));
-    const line = ctx.distanceYd + "yd  UP " + elevMil.toFixed(1) + "  " + windPart;
+    const line = ctx.distanceYd + "yd  UP " + elevMil.toFixed(1) + "  " + windPart +
+      "  ·  " + tofS.toFixed(1) + "s " + velFps + "fps " + energyFtLb + "ftlb";
 
     // A spoken sentence, e.g. "600 yards. Up 6.2 mils. Hold left 0.8 mils."
     const sideWord = side === "L" ? "left" : (side === "R" ? "right" : "");
     let speech = ctx.distanceYd + " yards. Up " + elevMil.toFixed(1) + " mils.";
     if (!noWind) speech += " Hold " + sideWord + " " + windMil.toFixed(1) + " mils.";
     if (ctx.inclineDeg) speech += " " + ctx.inclineDeg + " degree angle.";
+    // Brief tail: time of flight, retained velocity, energy. "f p s" reads as
+    // letters; spelling it out keeps the speech engine from saying "fps".
+    speech += " Time " + tofS.toFixed(1) + " seconds, " + velFps + " f p s, " +
+      energyFtLb + " foot pounds.";
 
     return {
-      card: { elevMil: elevMil, elevMOA: elevMOA, windMil: windMil, windSide: side },
+      card: {
+        elevMil: elevMil, elevMOA: elevMOA, windMil: windMil, windSide: side,
+        tofS: tofS, velFps: velFps, energyFtLb: energyFtLb
+      },
       line: line,
       speech: speech
     };

@@ -123,11 +123,16 @@ function fillLibrarySelect() {
    ------------------------------------------------------------------------- */
 
 // Open the form. If `profile` is given we're editing; otherwise it's blank/new.
-function openProfileForm(profile) {
-  editingId = profile ? profile.id : null;
-  $("profileFormTitle").textContent = profile ? "Edit Profile" : "New Profile";
+// Pass asNew=true to fill the fields FROM `profile` but treat the result as a
+// brand-new profile (editingId=null, title "New Profile"). That's how picking a
+// cartridge from the library pre-fills a New Profile without editing anything.
+function openProfileForm(profile, asNew) {
+  const editing = profile && !asNew;     // a real edit only when not forced new
+  editingId = editing ? profile.id : null;
+  $("profileFormTitle").textContent = editing ? "Edit Profile" : "New Profile";
 
-  // Fill the fields (use blanks for a brand-new profile).
+  // Fill the fields. When editing OR seeding from a library preset we copy the
+  // object's values; for a blank New Profile (no object) we use defaults.
   $("pfName").value = profile ? profile.name : "";
   $("pfCaliber").value = profile ? profile.caliber : "";
   $("pfWeight").value = profile ? profile.bulletWeightGr : "";
@@ -229,6 +234,12 @@ function renderHud() {
   const prefix = (out.card.windMil < 0.05) ? "" : out.card.windSide + " ";
   $("hudWindMil").textContent = prefix + out.card.windMil.toFixed(1);
   $("hudWindMOA").textContent = Math.abs(hold.driftMOA).toFixed(1);
+
+  // Tertiary line: time of flight, retained velocity, energy. Display rounding
+  // only — the underlying numbers stay full-precision in the solution.
+  $("hudTof").textContent = out.card.tofS.toFixed(1);
+  $("hudVel").textContent = out.card.velFps;
+  $("hudEnergy").textContent = out.card.energyFtLb;
 }
 
 /* -------------------------------------------------------------------------
@@ -242,18 +253,39 @@ function renderDope() {
 
   $("dopeProfile").textContent = profile.name + " — DOPE";
 
+  // Where does this load go transonic / subsonic? Used both for the caption and
+  // to shade the rows where accuracy starts to fall off.
+  const zones = Ballistics.transonicRanges(solution.rows);
+  // The table only shows out to 1000 yd; if the load is still supersonic there,
+  // say so plainly even though the simulation runs a bit further.
+  if (zones.transonicYd === null || zones.transonicYd > 1000) {
+    $("dopeRange").textContent = "Supersonic through 1000 yd";
+  } else {
+    // Transonic happens within the table — state the meaningful crossings.
+    const tr = "Transonic ~" + Math.round(zones.transonicYd) + " yd";
+    const sub = (zones.subsonicYd === null) ? "" : " · subsonic ~" + Math.round(zones.subsonicYd) + " yd";
+    $("dopeRange").textContent = tr + sub;
+  }
+
   const body = $("dopeBody");
   body.innerHTML = "";
 
   for (let yd = 25; yd <= 1000; yd += 25) {
     const h = solution.holdAt(yd);
     const row = document.createElement("tr");
+    // Shade rows at/after each threshold so the user can see where the load
+    // degrades. Subsonic wins (it's the worse zone) when both apply.
+    if (zones.subsonicYd !== null && yd >= zones.subsonicYd) row.className = "subsonic";
+    else if (zones.transonicYd !== null && yd >= zones.transonicYd) row.className = "transonic";
     row.innerHTML =
       "<td>" + yd + "</td>" +
       "<td>" + h.dropMil.toFixed(1) + "</td>" +
       "<td>" + h.dropMOA.toFixed(1) + "</td>" +
       "<td>" + Math.abs(h.driftMil).toFixed(1) + "</td>" +
-      "<td>" + Math.round(h.velocityFps) + "</td>";
+      "<td>" + Math.abs(h.driftMOA).toFixed(1) + "</td>" +
+      "<td>" + h.timeS.toFixed(2) + "</td>" +
+      "<td>" + Math.round(h.velocityFps) + "</td>" +
+      "<td>" + Math.round(h.energyFtLb) + "</td>";
     body.appendChild(row);
   }
 }
@@ -491,25 +523,16 @@ $("profileSelect").addEventListener("change", (e) => {
   activeId = e.target.value;
   Storage.setActiveId(activeId);
 });
-// Cartridge library: picking one opens a blank New Profile form, then fills it
-// in. We open the form with openProfileForm(null) FIRST so editingId is null and
-// the title says "New Profile" — then overwrite the fields with the preset's
-// values. (Passing the preset straight into openProfileForm would treat it like
-// an existing profile being edited, which we don't want.)
+// Cartridge library: picking one opens a New Profile form pre-filled from the
+// preset. openProfileForm(preset, true) fills the fields FROM the preset while
+// forcing it to be treated as new (editingId=null, title "New Profile"), so we
+// no longer duplicate the field-fill assignments here.
 $("librarySelect").addEventListener("change", (e) => {
   const idx = e.target.value;
   if (idx === "") return;                 // the placeholder row — nothing to do
   const preset = PRESETS[Number(idx)];
 
-  openProfileForm(null);                   // blank New Profile form first...
-  $("pfName").value = preset.name;         // ...then fill it from the preset
-  $("pfCaliber").value = preset.caliber;
-  $("pfWeight").value = preset.bulletWeightGr;
-  $("pfDragModel").value = preset.dragModel;
-  $("pfBc").value = preset.bc;
-  $("pfMv").value = preset.muzzleVelocityFps;
-  $("pfZero").value = preset.zeroDistanceYd;
-  $("pfSight").value = preset.sightHeightIn;
+  openProfileForm(preset, true);          // fill from preset, but as a NEW profile
 
   // Reset to the placeholder so the SAME cartridge can be picked again — a
   // <select> only fires "change" when its value actually changes.
@@ -866,7 +889,7 @@ showScreen("setup");
 
 // Show which build is loaded — lets us confirm an update actually reached the
 // glasses (read it at the bottom of the Setup screen).
-const APP_VERSION = "v13";
+const APP_VERSION = "v14";
 $("buildTag").textContent = "RangeHUD " + APP_VERSION;
 $("appTitle").textContent = "RangeHUD " + APP_VERSION;  // version up top, easy to spot
 
