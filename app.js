@@ -889,7 +889,7 @@ showScreen("setup");
 
 // Show which build is loaded — lets us confirm an update actually reached the
 // glasses (read it at the bottom of the Setup screen).
-const APP_VERSION = "v14";
+const APP_VERSION = "v15";
 $("buildTag").textContent = "RangeHUD " + APP_VERSION;
 $("appTitle").textContent = "RangeHUD " + APP_VERSION;  // version up top, easy to spot
 

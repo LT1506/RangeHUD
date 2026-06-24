@@ -9,7 +9,7 @@
   <link rel="stylesheet" href="style.css" />
   <!-- Tells the browser this is an installable app, and sets the toolbar tint. -->
   <link rel="manifest" href="manifest.webmanifest" />
-  <meta name="theme-color" content="#14171c" />
+  <meta name="theme-color" content="#070809" />
 </head>
 <body>
 
@@ -19,6 +19,14 @@
        ===================================================================== -->
   <section id="setup" class="screen">
     <h1 id="appTitle">RangeHUD</h1>
+
+    <!-- =========================================================
+         SECTION 1: Rifle & Load
+         Section headers are plain <div>/<span> (NOT buttons) on
+         purpose: the glasses form-navigation walks every visible
+         button, so a decorative button would become a dead nav stop.
+         ========================================================= -->
+    <div class="seg"><span class="d">&#9679;</span> Rifle &amp; Load</div>
 
     <!-- ---- Profile picker ---- -->
     <div class="card">
@@ -72,50 +80,73 @@
       </div>
     </div>
 
-    <!-- ---- Environmental conditions ---- -->
-    <div class="card">
-      <h2>Conditions</h2>
+    <!-- =========================================================
+         SECTION 2: Conditions
+         The weather auto-fill button is promoted to the TOP of the
+         section (full-width). app.js only touches it by id / textContent
+         / disabled, so the class name is free to restyle it.
+         ========================================================= -->
+    <div class="seg"><span class="d">&#9679;</span> Conditions</div>
 
-      <!-- Fills temp, pressure, altitude and wind speed from a live weather
-           service using your location. You can still tweak anything by hand. -->
-      <button id="getWeatherBtn" class="primary">&#128205; Get weather for my location</button>
+    <!-- Fills temp, pressure, altitude and wind speed from a live weather
+         service using your location. You can still tweak anything by hand. -->
+    <button id="getWeatherBtn" class="wbtn"><span class="dot">&#10227;</span> Auto-fill from weather</button>
 
-      <label for="windSpeed">Wind speed (mph)</label>
-      <input id="windSpeed" type="number" step="1" value="10" />
+    <!-- ---- Manual condition fields, in tidy 2-up grids ---- -->
+    <div class="card card--inner">
+      <div class="row2">
+        <div class="field">
+          <label class="fl" for="windSpeed">Wind speed (mph)</label>
+          <input id="windSpeed" type="number" step="1" value="10" />
+        </div>
+        <div class="field">
+          <label class="fl" for="windClock">Wind direction (clock)</label>
+          <select id="windClock">
+            <option value="12">12 o'clock (headwind)</option>
+            <option value="1">1 o'clock</option>
+            <option value="2">2 o'clock</option>
+            <option value="3" selected>3 o'clock (full value, right)</option>
+            <option value="4">4 o'clock</option>
+            <option value="5">5 o'clock</option>
+            <option value="6">6 o'clock (tailwind)</option>
+            <option value="7">7 o'clock</option>
+            <option value="8">8 o'clock</option>
+            <option value="9">9 o'clock (full value, left)</option>
+            <option value="10">10 o'clock</option>
+            <option value="11">11 o'clock</option>
+          </select>
+        </div>
+      </div>
 
-      <label for="windClock">Wind direction (clock face)</label>
-      <select id="windClock">
-        <option value="12">12 o'clock (headwind)</option>
-        <option value="1">1 o'clock</option>
-        <option value="2">2 o'clock</option>
-        <option value="3" selected>3 o'clock (full value, right)</option>
-        <option value="4">4 o'clock</option>
-        <option value="5">5 o'clock</option>
-        <option value="6">6 o'clock (tailwind)</option>
-        <option value="7">7 o'clock</option>
-        <option value="8">8 o'clock</option>
-        <option value="9">9 o'clock (full value, left)</option>
-        <option value="10">10 o'clock</option>
-        <option value="11">11 o'clock</option>
-      </select>
-
-      <label for="incline">Shot angle (degrees up or down)</label>
-      <input id="incline" type="number" step="1" value="0" />
+      <div class="row2">
+        <div class="field">
+          <label class="fl" for="incline">Shot angle (degrees)</label>
+          <input id="incline" type="number" step="1" value="0" />
+        </div>
+        <div class="field">
+          <label class="fl" for="temp">Temperature (&deg;F)</label>
+          <input id="temp" type="number" step="1" value="59" />
+        </div>
+      </div>
+      <!-- Keep the tilt helper right next to the angle field it fills. -->
       <button id="readTiltBtn">Read angle from phone tilt</button>
 
-      <label for="temp">Temperature (&deg;F)</label>
-      <input id="temp" type="number" step="1" value="59" />
-
-      <label for="pressure">Pressure (inHg)</label>
-      <input id="pressure" type="number" step="0.01" value="29.92" />
-
-      <label for="altitude">Altitude (ft) &mdash; optional helper</label>
-      <input id="altitude" type="number" step="100" value="0" />
+      <div class="row2">
+        <div class="field">
+          <label class="fl" for="pressure">Pressure (inHg)</label>
+          <input id="pressure" type="number" step="0.01" value="29.92" />
+        </div>
+        <div class="field">
+          <label class="fl" for="altitude">Altitude (ft)</label>
+          <input id="altitude" type="number" step="100" value="0" />
+        </div>
+      </div>
+      <!-- Keep the pressure-from-altitude helper next to those two fields. -->
       <button id="altToPressureBtn">Set pressure from altitude</button>
     </div>
 
     <!-- ---- Truing: calibrate the profile to your real range data ---- -->
-    <div class="card">
+    <div class="card card--inner">
       <h2>Truing (calibrate to real data)</h2>
       <p class="hint">Shoot a group at a known distance, note the elevation that
         actually hit, and the app adjusts the profile to match it.</p>
@@ -138,16 +169,26 @@
       <p id="trueResult" class="hint"></p>
     </div>
 
-    <!-- ---- Target distance + navigation ---- -->
-    <div class="card">
-      <label for="targetDistance">Target distance (yards)</label>
-      <input id="targetDistance" type="number" step="25" value="500" />
-
-      <div class="button-row">
-        <button id="goHudBtn" class="primary">Open HUD &rarr;</button>
-        <button id="goDopeBtn">DOPE table</button>
-        <button id="goAnalysisBtn">Range log</button>
+    <!-- =========================================================
+         SECTION 3: Target
+         The distance is the most-changed value, so it's styled
+         larger and amber via .field--target.
+         ========================================================= -->
+    <div class="seg"><span class="d">&#9679;</span> Target</div>
+    <div class="card card--inner">
+      <div class="field field--target">
+        <label class="fl" for="targetDistance">Target distance (yards)</label>
+        <input id="targetDistance" type="number" step="25" value="500" />
       </div>
+    </div>
+
+    <!-- One obvious amber primary action. DOPE / Range log are quieter
+         outline buttons but keep their own ids + listeners and stay
+         visible/focusable for glasses nav. -->
+    <button id="goHudBtn" class="primary">Show HUD &#8594;</button>
+    <div class="button-row">
+      <button id="goDopeBtn" class="outline">DOPE table</button>
+      <button id="goAnalysisBtn" class="outline">Range log</button>
     </div>
 
     <p id="buildTag" class="hint" style="text-align:center; opacity:0.5">&mdash;</p>
@@ -165,6 +206,10 @@
       <div class="hud-distance"><span id="hudDistance">500</span><span class="unit">yd</span></div>
     </div>
     <div class="hud-tip">swipe &uarr; / &darr; to range</div>
+
+    <!-- Thin decorative divider between the distance block and the elevation
+         hold. It's a plain non-focusable div, so it's safe for glasses nav. -->
+    <div class="hud-div"></div>
 
     <div class="hud-hold hud-hold--elev">
       <div class="hud-label">ELEVATION</div>
